@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+kv_cache/
+results/
+*.pt
+*.safetensors
+.ipynb_checkpoints/
