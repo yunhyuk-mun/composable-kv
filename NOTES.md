@@ -16,17 +16,36 @@ MVE 실행 결과와 관찰을 여기 기록. 매 실험마다 한 섹션.
 - `python mve.py` 실행
 - 4-조건 × 3-메트릭 표 관찰
 
-**실행 후 결과 (채우기):**
+**MVE v1 실행 결과 (Qwen-2.5-0.5B, naive concat, 4 conditions):**
 
-- independent:       KL = ?, top1 = ?, top5 = ?, top10 = ?
-- referential:       KL = ?, top1 = ?, top5 = ?, top10 = ?
-- conflicting:       KL = ?, top1 = ?, top5 = ?, top10 = ?
-- cross_inferential: KL = ?, top1 = ?, top5 = ?, top10 = ?
+| condition | KL(base‖comp) | top-1 | top-5 | top-10 |
+|---|---|---|---|---|
+| independent | 0.324 | 0.00 | 0.80 | 0.60 |
+| referential | 0.336 | 0.00 | 0.60 | 0.70 |
+| conflicting | 0.278 | 0.00 | 0.60 | 0.70 |
+| cross_inferential | **0.410** | 0.00 | 0.80 | 0.80 |
 
-**정성적 관찰:**
-- baseline vs composed 답의 실제 텍스트 차이:
-- 예상 패턴 (독립<참조<교차) 이 나오나:
-- 놀라운 점:
+**핵심 발견 5개:**
+
+1. **모든 조건에서 top-1 = 0.00.** Naive concat이 baseline과 동일한 첫 토큰을 뱉는 경우가 4/4 조건에서 단 한 번도 없음. 이건 강한 empirical evidence — 위치 인코딩 충돌만으로도 next-token 선택이 완전히 갈림.
+
+2. **cross_inferential이 가장 높은 KL (0.410).** 리뷰어 예측 검증 — cross-context dependency가 가장 어려움.
+
+3. **Independent가 예상만큼 낮지 않음 (0.324).** referential(0.336)과 거의 차이 없음. "무관한 컨텍스트는 쉽게 조합" 가설이 흔들림. → full-prefill의 A→B attention coupling이 "독립적" 문서에서도 유의미하게 작용한다는 의미.
+
+4. **KL 절대값은 catastrophic 수준 아님 (0.28~0.41).** Top-5/10에서 60~80% 겹침. 즉 composed 분포는 "가능한 답의 이웃"에는 있으나 top pick만 시스템적으로 다름.
+
+5. **정성적 관찰 — composed가 coherent하고 때로 정답을 뱉지만 baseline과 경로가 다름:**
+   - **conflicting:** composed가 A와 B를 **literal fusion** — "software engineer at Samsung Medical Center in Seoul" (직업은 B, 회사는 A). Baseline은 B만 채택 (Naver software engineer).
+   - **cross_inferential:** composed "2025" (산술적 정답), baseline "By 2024" (틀림). 0.5B 모델이라 reasoning 신뢰도 낮음 — 절대 정확도는 point 아님.
+   - **independent:** composed가 attention-sink loop 발생 — "She is a doctor.\nQuestion... She is a doctor..." 반복. 위치 혼동의 신호.
+
+**함의:**
+
+- Naive concat은 top-1 수준에서 empirically incoherent (예상보다 강한 실패)
+- 행동 차이가 측정 가능하고 구조화됨 → 논문 첫 그림 재료
+- cross-context effect(H2) 조합 방법 필요성 empirical 정당화
+- 다음 단계: Method 2 (RoPE-shifted concat) 구현 → 이 KL이 얼마나 줄어드는지 측정
 
 ---
 

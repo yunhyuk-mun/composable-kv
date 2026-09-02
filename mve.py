@@ -1,5 +1,5 @@
 """
-Minimum Viable Experiment for Composable KV Cache — v2.
+Minimum Viable Experiment for Composable KV Cache -- v2.
 
 Reframed per external review: we don't test exact equivalence (impossible
 because single-context KVs lack cross-context interactions). We measure
@@ -10,12 +10,6 @@ Metrics:
   1. KL(p_baseline || p_composed) on next-token distribution
   2. Top-k agreement (k=1, 5, 10)
   3. Greedy answer (qualitative)
-
-Four conditions probe different aspects of cross-context dependency:
-  - independent:       A, B unrelated                → composition should be easy
-  - referential:       B references entities in A     → partial breakdown
-  - conflicting:       same entity, different facts   → which wins?
-  - cross_inferential: answer requires A AND B fused  → hardest, motivates combiner
 """
 
 import torch
@@ -51,7 +45,7 @@ CONDITIONS = {
 
 def load_model():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, dtype=torch.float32)
     model.eval()
     return model, tokenizer
 
@@ -60,24 +54,26 @@ def prefill(model, tokenizer, text):
     inputs = tokenizer(text, return_tensors="pt")
     with torch.no_grad():
         out = model(**inputs, use_cache=True)
-    kv = out.past_key_values
-    if hasattr(kv, "to_legacy_cache"):
-        kv = kv.to_legacy_cache()
-    return kv, inputs.input_ids.shape[1]
+    return out.past_key_values, inputs.input_ids.shape[1]
 
 
-def naive_concat_kv(kv_a, kv_b):
-    return tuple(
-        (torch.cat([ka, kb], dim=2), torch.cat([va, vb], dim=2))
-        for (ka, va), (kb, vb) in zip(kv_a, kv_b)
-    )
+def naive_concat_kv(cache_a, cache_b):
+    new_cache = DynamicCache()
+    for layer_idx in range(len(cache_a.layers)):
+        ka = cache_a.layers[layer_idx].keys
+        va = cache_a.layers[layer_idx].values
+        kb = cache_b.layers[layer_idx].keys
+        vb = cache_b.layers[layer_idx].values
+        k_cat = torch.cat([ka, kb], dim=-2)
+        v_cat = torch.cat([va, vb], dim=-2)
+        new_cache.update(k_cat, v_cat, layer_idx)
+    return new_cache
 
 
-def next_token_dist_with_kv(model, tokenizer, query, past_kv_tuple, past_len):
+def next_token_dist_with_kv(model, tokenizer, query, cache, past_len):
     q_ids = tokenizer(query, return_tensors="pt").input_ids
     q_len = q_ids.shape[1]
     attn = torch.ones(1, past_len + q_len, dtype=torch.long)
-    cache = DynamicCache.from_legacy_cache(past_kv_tuple)
     with torch.no_grad():
         out = model(input_ids=q_ids, attention_mask=attn, past_key_values=cache)
     return F.softmax(out.logits[0, -1, :], dim=-1)
@@ -102,11 +98,10 @@ def top_k_agreement(p_ref, p_test, k):
     return len(top_ref & top_test) / k
 
 
-def greedy_with_kv(model, tokenizer, past_kv_tuple, past_len, query, max_new=25):
+def greedy_with_kv(model, tokenizer, cache, past_len, query, max_new=25):
     q_ids = tokenizer(query, return_tensors="pt").input_ids
     q_len = q_ids.shape[1]
     attn = torch.ones(1, past_len + q_len, dtype=torch.long)
-    cache = DynamicCache.from_legacy_cache(past_kv_tuple)
     with torch.no_grad():
         out = model.generate(
             input_ids=q_ids,
@@ -143,7 +138,9 @@ def run_condition(model, tokenizer, name, cond):
     full_prompt = cond["A"] + " " + cond["B"] + cond["query"]
 
     p_base = next_token_dist_from_scratch(model, tokenizer, full_prompt)
-    p_comp = next_token_dist_with_kv(model, tokenizer, cond["query"], kv_composed, composed_len)
+
+    kv_composed_for_dist = naive_concat_kv(kv_a, kv_b)
+    p_comp = next_token_dist_with_kv(model, tokenizer, cond["query"], kv_composed_for_dist, composed_len)
 
     kl = kl_divergence(p_base, p_comp)
     top1 = top_k_agreement(p_base, p_comp, 1)
@@ -151,32 +148,29 @@ def run_condition(model, tokenizer, name, cond):
     top10 = top_k_agreement(p_base, p_comp, 10)
 
     ans_base = greedy_from_scratch(model, tokenizer, full_prompt)
-    ans_comp = greedy_with_kv(model, tokenizer, kv_composed, composed_len, cond["query"])
+
+    kv_composed_for_gen = naive_concat_kv(kv_a, kv_b)
+    ans_comp = greedy_with_kv(model, tokenizer, kv_composed_for_gen, composed_len, cond["query"])
 
     print(f"  KL(base||comp):  {kl:.4f}")
     print(f"  Top-1 / 5 / 10:  {top1:.2f} / {top5:.2f} / {top10:.2f}")
     print(f"  Baseline answer: {ans_base!r}")
     print(f"  Composed answer: {ans_comp!r}")
 
-    return {"cond": name, "kl": kl, "t1": top1, "t5": top5, "t10": top10}
+    return {"cond": name, "kl": kl, "t1": top1, "t5": top5, "t10": top10,
+            "base": ans_base, "comp": ans_comp}
 
 
 def main():
-    print(f"Loading {MODEL_NAME} (first run downloads ~1GB) ...")
+    print(f"Loading {MODEL_NAME} ...")
     model, tokenizer = load_model()
 
     results = [run_condition(model, tokenizer, n, c) for n, c in CONDITIONS.items()]
 
-    print(f"\n{'=' * 60}\nSUMMARY — naive concat vs full-prefill baseline\n{'=' * 60}")
+    print(f"\n{'=' * 60}\nSUMMARY -- naive concat vs full-prefill baseline\n{'=' * 60}")
     print(f"{'condition':<20}{'KL':>10}{'top1':>8}{'top5':>8}{'top10':>8}")
     for r in results:
         print(f"{r['cond']:<20}{r['kl']:>10.3f}{r['t1']:>8.2f}{r['t5']:>8.2f}{r['t10']:>8.2f}")
-
-    print("\nExpected pattern:")
-    print("  independent       — low KL, high top-k")
-    print("  referential       — mid")
-    print("  conflicting       — variable")
-    print("  cross_inferential — high KL, low top-k  (motivates learned combiner)")
 
 
 if __name__ == "__main__":
