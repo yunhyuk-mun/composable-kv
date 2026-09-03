@@ -13,8 +13,9 @@ Can independently prefilled KV caches be composed in cache-space to approximate 
 - [x] MVE: extract, serialize, and re-inject KV caches (Qwen-2.5-0.5B, DynamicCache API)
 - [x] Raw-concat behavioral baseline (next-token KL, top-k agreement)
 - [x] Four-condition controlled benchmark (results below)
+- [x] Layer-wise K/V divergence analysis (mid-layer dip identified)
 - [ ] RoPE-shifted concat baseline
-- [ ] Layer/head failure analysis
+- [ ] Layer/head failure analysis (per-head, per-token)
 - [ ] Learned corrector (H3)
 - [ ] Cost/latency Pareto measurement
 - [ ] Public technical report / arXiv submission
@@ -36,6 +37,27 @@ Can independently prefilled KV caches be composed in cache-space to approximate 
 4. **정성적:** conflicting에서 composed가 A와 B를 **literal fusion** ("software engineer at Samsung Medical Center") — 완전한 실패도, 완전한 성공도 아닌 구조적 mixing. independent에서 loop 발생 (위치 혼동 신호).
 
 **함의:** 다음 단계는 (a) RoPE-shifted concat으로 이 KL이 얼마나 줄어드는지, (b) layer-selective composition이 특정 층에서 이득을 주는지.
+
+## Layer-wise 분석 결과 (analyze_layers.py)
+
+B-alone K/V를 full-prefill의 B-portion과 layer별 cosine 유사도로 비교. V는 RoPE 없으므로 순수 cross-context 효과 측정.
+
+**평균 유사도:**
+
+| condition | K mean | V mean |
+|---|---|---|
+| independent | 0.817 | 0.844 |
+| referential | 0.800 | 0.822 |
+| conflicting | 0.817 | **0.777** |
+| cross_inferential | 0.835 | 0.823 |
+
+**결정적 발견 3개:**
+
+1. **Mid-layer dip (L10-L15).** 모든 조건에서 V 유사도가 중간 레이어에서 급락 (conflicting L12 = 0.56). 초기·후반 레이어는 cross-context 영향이 작음. 이는 해석성 문헌의 "middle layers do semantic integration" 관찰과 일치.
+
+2. **Conflicting 조건에서만 V < K.** 위치 효과보다 cross-context 효과가 강함. → **RoPE-shift만으로 conflicting은 못 고침.**
+
+3. **Method 6 (learned combiner) 설계 방향 결정:** 모든 레이어에 붙일 필요 없음 → **L10-L15에 selective corrector** = 최소 파라미터로 최대 효과. 리뷰어의 "combiner가 크면 prefill이 낫다" 우려를 원천 대응.
 
 ## 핵심 관찰 (프로젝트 동기)
 

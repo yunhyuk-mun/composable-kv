@@ -49,6 +49,50 @@ MVE 실행 결과와 관찰을 여기 기록. 매 실험마다 한 섹션.
 
 ---
 
+## Session 1b: Layer-wise 분석 (analyze_layers.py)
+
+**목적:** 어느 레이어에서 cross-context 손실이 가장 큰지 지도.
+
+**설계:**
+- ids_a, ids_b를 tokenize 후 concat해서 kv_full (baseline)
+- kv_b만의 K/V vs kv_full의 B-portion K/V를 layer별 cosine sim으로 비교
+- V는 RoPE 없음 → 순수 cross-context 효과
+- K는 RoPE 있음 → 위치 + cross-context 혼합
+
+**Sanity check:** A-portion cos = 1.0000 (모든 조건). 인과적 attention 확인.
+
+**핵심 발견 3개:**
+
+**1. Mid-layer dip (L10~L15)이 보편적.** V 유사도가 이 구간에서 급락:
+- independent: L12=0.69, L13=0.68
+- referential: L12=0.63
+- conflicting: **L12=0.56, L13=0.60, L14=0.59** (최저)
+- cross_inferential: L12=0.61
+
+초기(L0-L2) V cos ≈ 0.95-1.00, 후반(L20-L23) ≈ 0.80-0.90. **중간 레이어가 semantic integration을 담당한다는 해석성 문헌과 정확히 일치.**
+
+**2. Conflicting에서만 V(0.78) < K(0.82).** 다른 조건은 K가 낮음 (RoPE 위치 문제 지배). Conflicting은 **cross-context 효과가 위치 효과보다 강함.** → RoPE-shift만으로는 conflicting 못 고침.
+
+**3. 평균 K/V 요약:**
+| condition | K mean | V mean |
+|---|---|---|
+| independent | 0.817 | 0.844 |
+| referential | 0.800 | 0.822 |
+| conflicting | 0.817 | **0.777** |
+| cross_inferential | 0.835 | 0.823 |
+
+**연구 함의 (Method 6 설계 정보):**
+
+- 모든 레이어에 corrector 붙일 필요 없음 → **L10-L15 selective corrector**가 최소 비용 최대 효과
+- V 보정 위주 (K는 RoPE-shift로 대부분 해결)
+- 리뷰어의 "combiner가 크면 prefill이 낫다" 우려 → **mid-layer만 corrector**로 파라미터/비용 급감 가능
+
+**다음:**
+- Method 2 (RoPE-shifted concat) 구현 → K 유사도가 얼마나 올라가는지 측정
+- Method 2 후에도 남는 V 갭 = learned corrector가 채워야 할 몫
+
+---
+
 ## 외부 리뷰 요지 (2026-09-03, MVE v1 → v2 재구조화 근거)
 
 ### 강한 점 (그대로 유지)
