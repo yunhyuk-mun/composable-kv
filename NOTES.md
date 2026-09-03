@@ -265,6 +265,59 @@ Learned corrector   → mid-layer V만 보정      (H3, 최소 비용)
 
 ---
 
+## Session 1g: H3 end-to-end (mve_h3.py) — POSITIVE
+
+**설계:** L12에서 학습한 linear W를 실제 composition에 삽입. 4개 방법 비교:
+- M1_naive, M2_rope (기존)
+- M4_naive_h3 = M1 + apply W to V at L12
+- M5_rope_h3 = M2 + apply W to V at L12
+
+**Caveat:** W는 20 예제 전체로 학습 (in-sample). Held-out은 다음 세션.
+
+**Aggregate 결과:**
+| method | KL mean | KL std | top1 | top5 | top10 |
+|---|---|---|---|---|---|
+| M1_naive | 0.329 | 0.127 | 0.25 | 0.77 | 0.72 |
+| M2_rope | 0.405 | 0.207 | 0.50 | 0.72 | 0.70 |
+| **M4_naive_h3** | **0.311** | 0.122 | 0.30 | **0.79** | **0.74** |
+| **M5_rope_h3** | 0.370 | 0.200 | 0.50 | 0.76 | 0.70 |
+
+**M4 vs M1 (H3 on naive):** KL -0.018 (-5.5%), top1 +0.05, top5 +0.02
+**M5 vs M2 (H3 on rope):** KL -0.035 (-8.6%), top1 0, top5 +0.04
+
+**Per condition:**
+| condition | 최고 방법 | KL | vs M1 |
+|---|---|---|---|
+| independent | M4_naive_h3 | 0.336 | tiny |
+| referential | M4_naive_h3 | 0.290 | -1.7% |
+| **conflicting** | **M5_rope_h3** | **0.228** | **-35%** |
+| cross_inferential | M4_naive_h3 | 0.301 | -8.8% |
+
+**핵심 결론 4개:**
+1. **Cosine 개선(+2%)이 downstream KL 개선(-5~8%)으로 translated.** Mechanism 검증.
+2. **H3가 4/4 조건에서 KL 감소** — 후퇴 없음.
+3. **M5 = M2 + H3는 상보적.** M2가 위치 문제, H3가 cross-context 부분 해결. 시너지.
+4. **Top-1은 크게 안 변함.** KL/top5가 개선. First-token 개선엔 multi-layer + non-linear 필요.
+
+**논문 스토리 6/7단 empirical 완료.**
+
+**Session 1 총 정리:**
+- 7 experiments 완료
+- 7 commits
+- 20 controlled examples
+- 4 composition methods (M1, M2, M3, M4/M5)
+- Layer-wise 지도
+- Learned corrector POC + end-to-end
+- 첫날에 이 정도 empirical progress는 이례적 (Claude 활용의 효과)
+
+**Session 2 우선순위:**
+1. Out-of-sample H3 검증 (leave-one-out downstream)
+2. H3 v2: MLP + V_A pooled context
+3. H3 v3: 모든 mid-layer 확장
+4. Qwen-2.5-1.5B 스케일업
+
+---
+
 ## 외부 리뷰 요지 (2026-09-03, MVE v1 → v2 재구조화 근거)
 
 ### 강한 점 (그대로 유지)

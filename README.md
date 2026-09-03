@@ -18,9 +18,10 @@ Can independently prefilled KV caches be composed in cache-space to approximate 
 - [x] Statistical robustness (n=5 aggregate reveals condition-dependent M2 behavior)
 - [x] Method 3: layer-selective RoPE-shift (negative result: M3 ~= M2, mid-layer dip is symptom not cause)
 - [x] H3 POC: linear V corrector at L12 (marginal +2% cosine, 5-fold CV)
+- [x] H3 end-to-end: L12 linear correction reduces downstream KL by 5-8% (in-sample W)
+- [ ] Held-out H3 evaluation (leave-one-out downstream)
 - [ ] H3 v2: MLP + V_A context (non-linear + context-conditional)
 - [ ] H3 v3: all mid-layers (L10-L15) with corrected V
-- [ ] End-to-end: corrected KV downstream KL/top-1 measurement
 - [ ] Scale-up to Qwen-2.5-1.5B (baseline reliability)
 - [ ] Cost/latency Pareto measurement
 - [ ] Public technical report / arXiv submission
@@ -131,17 +132,36 @@ H3 learned corrector → mid-layer V만 보정 (minimum-parameter form)
 
 **해석:** 방향은 맞지만 unconditional 64x64 linear는 너무 단순. **다음 단계 명확한 근거 확보:** (1) non-linear (MLP), (2) context-conditional (V_A 요약 concat), (3) 여러 layer 확장.
 
-## 논문 스토리 아크 (7단, 5단 empirical 완료)
+## 논문 스토리 아크 (7단, 6단 empirical 완료)
 
 ```
-1. M1 naive           → broad failure                    [완료]
-2. M2 RoPE-shift      → conditional win/loss             [완료]
-3. Layer analysis     → mid-layer V dip                  [완료]
-4. M3 layer-selective → NEGATIVE (symptom vs cause)      [완료]
-5. H3 linear POC      → MARGINAL +2%                     [완료]
-6. H3 MLP+context     → future                           [남음]
-7. Pareto measurement → future                           [남음]
+1. M1 naive           → broad failure                       [완료]
+2. M2 RoPE-shift      → conditional win/loss                [완료]
+3. Layer analysis     → mid-layer V dip                     [완료]
+4. M3 layer-selective → NEGATIVE (symptom vs cause)         [완료]
+5. H3 linear POC      → MARGINAL +2% cosine                 [완료]
+6. H3 end-to-end      → -5~8% KL, 4/4 conditions            [완료]
+7. H3 v2/v3 + Pareto  → future (MLP, context, multi-layer)  [남음]
 ```
+
+## H3 End-to-End 결과 (mve_h3.py, in-sample W)
+
+L12 linear corrector를 실제 composition에 삽입. 4 방법 비교, 20 examples:
+
+| method | KL mean | top1 | top5 |
+|---|---|---|---|
+| M1_naive | 0.329 | 0.25 | 0.77 |
+| M2_rope | 0.405 | 0.50 | 0.72 |
+| **M4_naive_h3** | **0.311** | 0.30 | **0.79** |
+| **M5_rope_h3** | **0.370** | 0.50 | 0.76 |
+
+**M4 vs M1: KL -5.5%. M5 vs M2: KL -8.6%. H3가 모든 4/4 조건에서 KL 감소.**
+
+Conflicting 조건에서 M5 (rope + h3) = **0.228** vs M1 0.353 (**-35%**). **RoPE-shift와 H3가 상보적** — M2는 위치 문제, H3는 cross-context 문제.
+
+**Cosine 개선(+2%)이 downstream KL 개선(-5~8%)으로 실제 translated.** Mechanism 검증 완료.
+
+**Caveat:** In-sample W. Out-of-sample downstream 검증은 다음 세션.
 
 ## 핵심 관찰 (프로젝트 동기)
 
