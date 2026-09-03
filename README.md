@@ -17,8 +17,11 @@ Can independently prefilled KV caches be composed in cache-space to approximate 
 - [x] RoPE-shifted concat baseline (Method 2 -- validated)
 - [x] Statistical robustness (n=5 aggregate reveals condition-dependent M2 behavior)
 - [x] Method 3: layer-selective RoPE-shift (negative result: M3 ~= M2, mid-layer dip is symptom not cause)
-- [ ] Scale-up to Qwen-2.5-1.5B (baseline reliability for referential/reasoning)
-- [ ] Learned corrector (H3, targeting cross-context injection)
+- [x] H3 POC: linear V corrector at L12 (marginal +2% cosine, 5-fold CV)
+- [ ] H3 v2: MLP + V_A context (non-linear + context-conditional)
+- [ ] H3 v3: all mid-layers (L10-L15) with corrected V
+- [ ] End-to-end: corrected KV downstream KL/top-1 measurement
+- [ ] Scale-up to Qwen-2.5-1.5B (baseline reliability)
 - [ ] Cost/latency Pareto measurement
 - [ ] Public technical report / arXiv submission
 
@@ -110,6 +113,35 @@ H3 learned corrector → mid-layer V만 보정 (minimum-parameter form)
 **해석:** Referential에서 B의 "She"는 A의 Alice 참조. Full-prefill B의 hidden state는 이미 A를 "봤음". RoPE-shift는 위치만 맞추지만 **B가 A를 알고 있다는 잘못된 정렬**을 만들어 M1보다 오히려 큰 오류. Naive concat은 misaligned지만 이 잘못된 신호가 없음.
 
 **리뷰어 예측의 정량적 확증** — H3 learned corrector가 겨냥해야 할 정확한 지점.
+
+## H3 POC 결과 (h3_poc.py, layer L12 V, 5-fold cross-val)
+
+가장 단순한 corrector: 64x64 linear map W (ridge regression). 20 examples, 536 samples, leave-4-out CV.
+
+| fold | baseline cos | corrected cos | delta |
+|---|---|---|---|
+| 0 | 0.6265 | 0.6161 | -0.0104 |
+| 1 | 0.5829 | 0.6184 | +0.0355 |
+| 2 | 0.5982 | 0.6434 | +0.0452 |
+| 3 | 0.6707 | 0.6581 | -0.0125 |
+| 4 | 0.5972 | 0.6372 | +0.0400 |
+| **mean** | **0.6151** | **0.6346** | **+0.0195** |
+
+**판정: MARGINAL POSITIVE** — 3/5 fold 개선, 평균 +2% cosine.
+
+**해석:** 방향은 맞지만 unconditional 64x64 linear는 너무 단순. **다음 단계 명확한 근거 확보:** (1) non-linear (MLP), (2) context-conditional (V_A 요약 concat), (3) 여러 layer 확장.
+
+## 논문 스토리 아크 (7단, 5단 empirical 완료)
+
+```
+1. M1 naive           → broad failure                    [완료]
+2. M2 RoPE-shift      → conditional win/loss             [완료]
+3. Layer analysis     → mid-layer V dip                  [완료]
+4. M3 layer-selective → NEGATIVE (symptom vs cause)      [완료]
+5. H3 linear POC      → MARGINAL +2%                     [완료]
+6. H3 MLP+context     → future                           [남음]
+7. Pareto measurement → future                           [남음]
+```
 
 ## 핵심 관찰 (프로젝트 동기)
 

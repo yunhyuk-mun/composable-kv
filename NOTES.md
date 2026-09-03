@@ -223,6 +223,48 @@ Learned corrector   → mid-layer V만 보정      (H3, 최소 비용)
 
 ---
 
+## Session 1f: H3 POC (h3_poc.py) — learned linear V corrector
+
+**설계 (최소 스코프):**
+- Target: layer L12 V (analyze_layers에서 dip 최저 조건)
+- Model: 64x64 linear map W (ridge regression via least-squares)
+- Data: 20 examples × ~26 tokens × 2 kv_heads = 536 samples per fold
+- Evaluation: 5-fold cross-validation (leave-4-out at example level)
+- Metric: cosine similarity (V_pred vs V_full) vs baseline (V_composed vs V_full)
+
+**결과:**
+| fold | baseline cos | corrected cos | delta |
+|---|---|---|---|
+| 0 | 0.6265 | 0.6161 | -0.0104 |
+| 1 | 0.5829 | 0.6184 | +0.0355 |
+| 2 | 0.5982 | 0.6434 | +0.0452 |
+| 3 | 0.6707 | 0.6581 | -0.0125 |
+| 4 | 0.5972 | 0.6372 | +0.0400 |
+| **평균** | **0.6151** | **0.6346** | **+0.0195** |
+
+**판정: MARGINAL POSITIVE.** 3/5 fold 개선, 2/5 소폭 악화, 평균 +2% cosine.
+
+**함의:**
+1. 방향은 맞음. Learned map이 cross-context gap을 어느 정도 닫음.
+2. 선형은 너무 단순. Unconditional 64x64 map은 평균적 correction만 학습.
+3. **다음 단계 명확한 empirical 근거:**
+   - Non-linear (MLP 2~3층)
+   - Context-conditional (V_A 요약을 입력에 concat)
+   - 여러 layer 확장
+
+**Portfolio 관점:**
+- 완결된 5-fold cross-val 실험
+- 정직한 marginal 결론 (과대주장 아님)
+- 다음 단계 근거 명확
+- **논문 스토리 7단 중 5단이 empirical 뒷받침** — 나머지 2단(MLP+context, Pareto)이 남은 연구
+
+**남은 최소 실험:**
+- H3 v2: MLP + V_A context — linear보다 얼마나 나은가
+- H3 v3: 모든 mid-layer(L10-L15)에 적용 — layer-wise 이득 누적
+- End-to-end: corrected KV로 mve.py 재실행 → downstream KL/top-1 개선 확인
+
+---
+
 ## 외부 리뷰 요지 (2026-09-03, MVE v1 → v2 재구조화 근거)
 
 ### 강한 점 (그대로 유지)
