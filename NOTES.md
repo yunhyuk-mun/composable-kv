@@ -193,6 +193,36 @@ Learned corrector   → mid-layer V만 보정      (H3, 최소 비용)
 
 ---
 
+## Session 1e: Method 3 (layer-selective RoPE-shift) — negative result
+
+**가설:** analyze_layers.py에서 mid-layer(L10-L15)에서 V dip이 관찰됨. → mid-layer는 shift 안 하고 나머지만 shift하면 M2의 referential 실패를 회피 가능?
+
+**설계:** M3_ex_mid = RoPE-shift on all layers except {L10, L11, L12, L13, L14, L15}. n=5 per condition, 동일 mve.py 파이프라인.
+
+**Aggregate 결과:**
+| condition | M1 KL | M2 KL | M3 KL | M2 top1 | M3 top1 |
+|---|---|---|---|---|---|
+| independent | 0.338 | 0.441 | 0.435 | 0.60 | 0.60 |
+| referential | 0.295 | 0.511 | 0.493 | 0.40 | 0.40 |
+| conflicting | 0.353 | 0.270 | 0.267 | 0.80 | 0.80 |
+| cross_inferential | 0.330 | 0.399 | 0.414 | 0.20 | 0.20 |
+
+**M3 ≈ M2. 모든 지표 1 std 이내 (noise 수준).**
+
+**함의:**
+1. **Mid-layer V dip은 증상, 원인 아님.** Layer 선택으론 실패 조건을 못 고침.
+2. Cross-context 정보 부재는 layer 조작으로 해결 불가 → **learned mechanism 필요.**
+3. H3 learned corrector의 존재 정당성 empirical 확보.
+
+**부수 관찰:** "Best method by KL"에서 M1이 3/4 승. 그러나 top-1은 M2/M3가 우위. 이유: baseline degenerate 조건에서 low KL = "같은 실패 모드". → **top-1이 primary metric으로 더 적합** (리뷰어의 behavioral 층 통찰과 부합).
+
+**다음:**
+- 1.5B로 스케일업 (baseline 신뢰성 개선하면 KL이 다시 의미 있어짐)
+- H3 proto: 작은 MLP corrector on mid-layer V만
+- 데이터 규모 확대 (n=5 → n=20+)
+
+---
+
 ## 외부 리뷰 요지 (2026-09-03, MVE v1 → v2 재구조화 근거)
 
 ### 강한 점 (그대로 유지)

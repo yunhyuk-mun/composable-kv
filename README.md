@@ -16,9 +16,9 @@ Can independently prefilled KV caches be composed in cache-space to approximate 
 - [x] Layer-wise K/V divergence analysis (mid-layer dip identified)
 - [x] RoPE-shifted concat baseline (Method 2 -- validated)
 - [x] Statistical robustness (n=5 aggregate reveals condition-dependent M2 behavior)
+- [x] Method 3: layer-selective RoPE-shift (negative result: M3 ~= M2, mid-layer dip is symptom not cause)
 - [ ] Scale-up to Qwen-2.5-1.5B (baseline reliability for referential/reasoning)
-- [ ] Layer-selective RoPE-shift (apply only to specific layers)
-- [ ] Learned corrector (H3, targeting mid-layer V)
+- [ ] Learned corrector (H3, targeting cross-context injection)
 - [ ] Cost/latency Pareto measurement
 - [ ] Public technical report / arXiv submission
 

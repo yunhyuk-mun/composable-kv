@@ -76,6 +76,24 @@ def rope_shifted_concat_kv(cache_a, cache_b, len_a):
     return new_cache
 
 
+MID_LAYERS = set(range(10, 16))  # L10-L15, per analyze_layers.py mid-layer dip
+
+
+def layer_selective_shift_kv(cache_a, cache_b, len_a, no_shift_layers):
+    """RoPE-shift K in all layers except those in no_shift_layers (naive concat there)."""
+    new_cache = DynamicCache()
+    for layer_idx in range(len(cache_a.layers)):
+        ka = cache_a.layers[layer_idx].keys
+        va = cache_a.layers[layer_idx].values
+        kb = cache_b.layers[layer_idx].keys
+        vb = cache_b.layers[layer_idx].values
+        kb_out = kb if layer_idx in no_shift_layers else rope_shift(kb, delta=len_a)
+        k_cat = torch.cat([ka, kb_out], dim=-2)
+        v_cat = torch.cat([va, vb], dim=-2)
+        new_cache.update(k_cat, v_cat, layer_idx)
+    return new_cache
+
+
 def next_token_dist_with_kv(model, tokenizer, query, cache, past_len):
     q_ids = tokenizer(query, return_tensors="pt").input_ids
     q_len = q_ids.shape[1]
@@ -157,8 +175,9 @@ def evaluate_method(model, tokenizer, cond, method_name, compose_fn):
 
 
 METHODS = {
-    "M1_naive": lambda a, b, la: naive_concat_kv(a, b),
-    "M2_rope":  lambda a, b, la: rope_shifted_concat_kv(a, b, la),
+    "M1_naive":   lambda a, b, la: naive_concat_kv(a, b),
+    "M2_rope":    lambda a, b, la: rope_shifted_concat_kv(a, b, la),
+    "M3_ex_mid":  lambda a, b, la: layer_selective_shift_kv(a, b, la, no_shift_layers=MID_LAYERS),
 }
 
 
@@ -209,18 +228,12 @@ def main():
                   f"{statistics.mean(vals['t5']):>8.2f}"
                   f"{statistics.mean(vals['t10']):>8.2f}")
 
-    print(f"\n{'=' * 70}\nDELTA M2 - M1 (positive dTop1 = M2 wins)\n{'=' * 70}")
-    print(f"{'condition':<20}{'dKL':>10}{'dTop1':>10}{'dTop5':>10}{'dTop10':>10}")
+    print(f"\n{'=' * 70}\nBEST METHOD per condition (by lowest KL mean)\n{'=' * 70}")
+    print(f"{'condition':<20}{'best':<12}{'KL':>10}{'top1':>8}")
     for r in results:
-        m1_kl = statistics.mean(r["per_method"]["M1_naive"]["kl"])
-        m2_kl = statistics.mean(r["per_method"]["M2_rope"]["kl"])
-        m1_t1 = statistics.mean(r["per_method"]["M1_naive"]["t1"])
-        m2_t1 = statistics.mean(r["per_method"]["M2_rope"]["t1"])
-        m1_t5 = statistics.mean(r["per_method"]["M1_naive"]["t5"])
-        m2_t5 = statistics.mean(r["per_method"]["M2_rope"]["t5"])
-        m1_t10 = statistics.mean(r["per_method"]["M1_naive"]["t10"])
-        m2_t10 = statistics.mean(r["per_method"]["M2_rope"]["t10"])
-        print(f"{r['cond']:<20}{m2_kl-m1_kl:>10.3f}{m2_t1-m1_t1:>10.2f}{m2_t5-m1_t5:>10.2f}{m2_t10-m1_t10:>10.2f}")
+        best_m = min(METHODS.keys(), key=lambda m: statistics.mean(r["per_method"][m]["kl"]))
+        vals = r["per_method"][best_m]
+        print(f"{r['cond']:<20}{best_m:<12}{statistics.mean(vals['kl']):>10.3f}{statistics.mean(vals['t1']):>8.2f}")
 
 
 if __name__ == "__main__":
