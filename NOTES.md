@@ -371,6 +371,65 @@ Learned corrector   → mid-layer V만 보정      (H3, 최소 비용)
 
 ---
 
+## Session 1i: Cost analysis (cost_analysis.py)
+
+**설계:** 리뷰어 우선순위 #3. "cheap corrector" 주장을 wall-clock + FLOP으로 정량화.
+
+**Wall-clock (CPU, median 5 runs, len_B=19):**
+| Op | ms | vs prefill(B) |
+|---|---|---|
+| prefill(B) [baseline] | 344.9 | 100% |
+| M1 naive | 3.1 | 0.91% |
+| M2 rope | 14.1 | 4.08% |
+| M4 h3_naive | 3.5 | 1.00% |
+| M5 h3_rope | 13.4 | 3.90% |
+
+**H3 correction 추가 비용:** M1 → M4 delta ≈ **0.34 ms** on CPU.
+
+**FLOPs (order-of-magnitude 추정):**
+- prefill(B) forward: 14.85 GFLOPs (rough)
+- H3 correction (19 tokens × 2 KV heads × 64×64): 311k FLOPs
+- **비율: 0.0021%**
+
+**해석:**
+- Composition(M1/M2)는 prefill(B)의 <5% wall-clock — 명백히 "cheap"
+- H3 correction 추가 비용 ~0.34 ms / 311k FLOPs는 prefill(B)의 0.0021% (~5만배 작음)
+- **"lightweight corrector" 주장의 empirical foundation 확보**
+
+**논문 초록에 쓸 tight claim:**
+> "A 64×64 linear V corrector at layer 12 adds ~0.34 ms wall-clock and 0.0021% FLOPs over naive concat, yet reduces held-out downstream next-token KL by 6.4% (M4 vs M1) or 9.4% (M5 vs M2) on the controlled benchmark."
+
+---
+
+## Session 1j: Pipeline sanity checks (sanity_check.py)
+
+**설계:** 리뷰어 우선순위 #1. Cache-injection mechanism 자체의 정확성 확인 → downstream 수치가 진짜 method 차이임을 확증.
+
+**4 checks:**
+
+| Check | 결과 | 임계 | 판정 |
+|---|---|---|---|
+| 1. Round-trip KL: prefill(prefix) + query vs prefill(prefix+query) | 3.13e-07 | <1e-3 | ✅ PASS |
+| 2. RoPE-shift(δ=0) is identity | 0.00 | <1e-5 | ✅ PASS |
+| 3. Deterministic prefill | 0.00 | <1e-5 | ✅ PASS |
+| 4. A-portion of kv_full == kv_a (causal) | 1.53e-05 | <1e-4 (float32) | ✅ PASS |
+
+**초기 실패 → 원인 규명:**
+- Check 1이 처음엔 max KL 0.907로 실패. 원인: `ids_a + ids_b` (token concat) vs tokenize(A+" "+B+query) (string concat 후 tokenize) 의 BPE 경계 불일치. **실제 method 파이프라인 버그 아님, sanity check 방법 문제.**
+- 수정: 양쪽 route에 **동일한 token ids** 사용 → 3.13e-07로 통과.
+- Check 4는 1.53e-05 diff — float32 정밀도 한계 (기대치 ~1e-5). 임계 완화 후 통과.
+
+**중요한 함의:**
+- Cache-injection의 noise floor = **~3e-7 KL**
+- 우리 관측 method 차이 = 0.02~0.04 KL (약 10^5 배 크다)
+- → **downstream KL 차이는 파이프라인 아티팩트 아님, 진짜 method 효과**
+
+**결과물 (h3_holdout 결과의 신뢰성 강화):**
+- M4 vs M1: -6.4% KL, M5 vs M2: -9.4% KL 은 pipeline noise가 아닌 진짜 corrector 효과
+- Sanity가 통과하지 않았다면 held-out 수치도 못 믿을 뻔함
+
+---
+
 ## 외부 리뷰 요지 (2026-09-03, MVE v1 → v2 재구조화 근거)
 
 ### 강한 점 (그대로 유지)

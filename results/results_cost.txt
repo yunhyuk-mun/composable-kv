@@ -1,0 +1,35 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading Qwen/Qwen2.5-0.5B ...
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  23%|##3       | 68/290 [00:00<00:00, 679.28it/s]Loading weights:  47%|####6     | 136/290 [00:00<00:00, 421.87it/s]Loading weights:  63%|######3   | 184/290 [00:00<00:00, 439.95it/s]Loading weights:  82%|########2 | 239/290 [00:00<00:00, 471.26it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 492.46it/s]
+Example: len_A=16, len_B=19
+
+Pre-caching kv_a, kv_b (excluded from composition timing) ...
+
+Timing composition methods (5 repeats each, median reported)...
+
+Timing prefill(B) as the fundamental unit of avoided work ...
+
+======================================================================
+WALL-CLOCK (median over 5 runs, CPU)
+======================================================================
+op                                 time (ms)    stdev (ms)     vs prefill(B)
+prefill(B) [baseline]                344.893         5.118           100.00%
+M1 naive_concat                        3.124         0.899             0.91%
+M2 rope_concat                        14.087         1.200             4.08%
+M4 h3_naive (+64x64 mm)                3.464         0.172             1.00%
+M5 h3_rope (+64x64 mm)                13.445         0.783             3.90%
+
+======================================================================
+FLOPS ESTIMATE (order-of-magnitude)
+======================================================================
+prefill(B) forward:                        14,852,554,752 FLOPs (~14852.6M)
+H3 correction (64x64 mm on 19*2 rows):       311,296 FLOPs (~311.3k)
+H3 correction as fraction of prefill(B):   0.0021%
+
+======================================================================
+INTERPRETATION
+======================================================================
+- Composition (M1/M2) is essentially free vs prefill(B): concat + small rotate.
+- H3 correction adds a 64x64 matmul at ONE layer on ~38 rows.
+- The H3 correction is orders of magnitude cheaper than a prefill(B) forward.
+- 'Cheap corrector' claim is substantiated by both wall-clock and FLOP estimates.

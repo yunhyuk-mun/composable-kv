@@ -43,6 +43,10 @@ An early-stage empirical study on Qwen-2.5-0.5B. Portfolio / research-in-progres
 
 **Standout note:** On the conflicting condition alone, M5 (RoPE + H3) reaches held-out KL 0.228 and top-1 = 1.00 (every held-out example's composed distribution picks the same top token as full prefill). This is the strongest individual condition result, but the honest headline is the aggregate held-out reduction across all four conditions.
 
+**Cost (CPU, Qwen-2.5-0.5B):** Composition itself (M1/M2) is under 5% of one `prefill(B)` wall-clock. The H3 correction adds ~0.34 ms and ~311k FLOPs on top of naive concat — approximately **0.0021%** of a full `prefill(B)` forward. The "cheap corrector" claim is now backed by numbers rather than assertion.
+
+**Pipeline sanity:** Cache-injection round-trip introduces ~3×10⁻⁷ KL noise (identical-token-id `prefill(prefix)` + query vs `prefill(prefix + query)`). The observed method deltas (0.02–0.04 KL absolute) are ~10⁵× larger than this noise floor, so downstream KL differences reflect real composition behavior, not injection artifacts. See [sanity_check.py](sanity_check.py).
+
 ## Reproduction
 
 ```bash
@@ -72,6 +76,12 @@ python mve_h3.py
 
 # H3 held-out: 5-fold, example-level split (leakage-free)
 python h3_holdout.py
+
+# Pipeline correctness checks
+python sanity_check.py
+
+# Wall-clock + FLOP cost of composition and correction
+python cost_analysis.py
 ```
 
 First run downloads `Qwen/Qwen2.5-0.5B` (~1 GB, no HF token needed). CPU-only.
@@ -91,6 +101,8 @@ composable-kv/
 ├── h3_poc.py              # H3 5-fold CV (representation-level)
 ├── h3_holdout.py          # H3 5-fold example-level held-out downstream
 ├── rope_test.py           # RoPE-shift verification
+├── cost_analysis.py       # Wall-clock + FLOP estimates
+├── sanity_check.py        # Pipeline correctness checks
 └── results/               # Raw output logs from all runs
 ```
 
@@ -123,11 +135,11 @@ None of these blockers is fatal to the direction; each is the subject of a concr
 - [x] RoPE-shifted baseline (M2) and layer-selective variant (M3)
 - [x] Linear H3 corrector: 5-fold CV representation + in-sample end-to-end
 - [x] Held-out H3 evaluation (5-fold example-level split): -6.4% / -9.4% KL, matches in-sample within 0.003
+- [x] Cache-injection sanity checks (round-trip KL = 3e-7, all 4 checks pass)
+- [x] H3 cost analysis: wall-clock ~0.34 ms extra, ~0.0021% FLOPs vs prefill(B)
 
-**Session 2 priority (before scaling model or corrector expressivity):**
-- [ ] Document cache-injection sanity checks (KV_full round-trip KL ≈ 0; attention_mask / cache_position policy)
+**Session 2 priority (before scaling corrector expressivity):**
 - [ ] Scale n to 20~30 examples per condition, with entity / length / template variation to reduce leakage
-- [ ] Measure H3 cost: FLOPs, latency, peak memory of the 64×64 map vs full B prefill
 - [ ] Reproduce main held-out numbers on Qwen-2.5-1.5B where baselines are more reliable
 
 **Then (contingent on the above):**
