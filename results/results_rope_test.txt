@@ -1,0 +1,39 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading Qwen/Qwen2.5-0.5B ...
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  26%|##5       | 75/290 [00:00<00:00, 738.39it/s]Loading weights:  51%|#####1    | 149/290 [00:00<00:00, 612.31it/s]Loading weights:  73%|#######3  | 212/290 [00:00<00:00, 492.90it/s]Loading weights:  91%|#########1| 264/290 [00:00<00:00, 493.22it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 533.08it/s]
+len_a=16, len_b=19
+
+layer        raw K cos     shifted K cos   V cos (ref)
+L0              0.9553            1.0000        1.0000
+L1              0.9403            0.9977        0.9865
+L2              0.9868            0.9997        0.9660
+L3              0.8731            0.9557        0.8817
+L4              0.8468            0.9538        0.8840
+L5              0.7689            0.9151        0.8711
+L6              0.6933            0.9408        0.8696
+L7              0.7178            0.9295        0.8686
+L8              0.7482            0.9681        0.8684
+L9              0.8311            0.9078        0.8438
+L10             0.7801            0.9131        0.7969
+L11             0.8556            0.8973        0.7835
+L12             0.7621            0.8980        0.6860
+L13             0.7767            0.8694        0.6832
+L14             0.8059            0.8911        0.7128
+L15             0.7647            0.8861        0.7623
+L16             0.7950            0.8509        0.8953
+L17             0.8093            0.9030        0.8922
+L18             0.7101            0.8956        0.8342
+L19             0.7056            0.9065        0.7869
+L20             0.8449            0.8939        0.8750
+L21             0.8142            0.8884        0.8669
+L22             0.8942            0.9420        0.8262
+L23             0.9237            0.9563        0.8138
+
+MEAN            0.8168            0.9233        0.8440
+
+Interpretation:
+  raw K cos    = position mismatch + cross-context effect
+  shifted K cos = ONLY cross-context effect (position fixed)
+  V cos         = ONLY cross-context effect (V has no RoPE, reference)
+
+If RoPE-shift is correct, shifted K cos should be much closer to V cos.

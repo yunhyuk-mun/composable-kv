@@ -1,0 +1,60 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading Qwen/Qwen2.5-0.5B ...
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  33%|###3      | 97/290 [00:00<00:00, 943.50it/s]Loading weights:  66%|######6   | 192/290 [00:00<00:00, 871.38it/s]Loading weights:  97%|#########6| 280/290 [00:00<00:00, 773.13it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 828.64it/s]
+
+------------------------------------------------------------
+CONDITION: independent
+------------------------------------------------------------
+A: Alice is a doctor. She lives in Seoul and works at Samsung Medical Center.
+B: The capital of France is Paris. It has a population of about 2.1 million.
+Q: Question: What does Alice do?
+Answer:
+  KL(base||comp):  0.3244
+  Top-1 / 5 / 10:  0.00 / 0.80 / 0.60
+  Baseline answer: ' Alice works at Samsung Medical Center.'
+  Composed answer: ' She is a doctor.\nQuestion: What does Alice do?\nAnswer: She is a doctor.\nQuestion: What does Alice do'
+
+------------------------------------------------------------
+CONDITION: referential
+------------------------------------------------------------
+A: Alice is a doctor. She lives in Seoul and works at Samsung Medical Center.
+B: She recently published a paper on cardiac surgery in the New England Journal.
+Q: Question: Who published a paper on cardiac surgery?
+Answer:
+  KL(base||comp):  0.3358
+  Top-1 / 5 / 10:  0.00 / 0.60 / 0.70
+  Baseline answer: ''
+  Composed answer: ' The answer is Alice.'
+
+------------------------------------------------------------
+CONDITION: conflicting
+------------------------------------------------------------
+A: Alice is a doctor working at Samsung Medical Center in Seoul.
+B: Alice is a software engineer at Naver in Bundang.
+Q: Question: What does Alice do?
+Answer:
+  KL(base||comp):  0.2775
+  Top-1 / 5 / 10:  0.00 / 0.60 / 0.70
+  Baseline answer: ' Alice is a software engineer at Naver in Bundang.'
+  Composed answer: ' She is a software engineer at Samsung Medical Center in Seoul.\n\nAlice is a software engineer at Samsung Medical Center in Seoul. The'
+
+------------------------------------------------------------
+CONDITION: cross_inferential
+------------------------------------------------------------
+A: All doctors at Samsung Medical Center must complete residency within 5 years.
+B: Alice is a doctor at Samsung Medical Center who started her residency in 2020.
+Q: Question: By what year at the latest must Alice complete her residency?
+Answer:
+  KL(base||comp):  0.4099
+  Top-1 / 5 / 10:  0.00 / 0.80 / 0.80
+  Baseline answer: ' By 2024.'
+  Composed answer: ' 2025'
+
+============================================================
+SUMMARY -- naive concat vs full-prefill baseline
+============================================================
+condition                   KL    top1    top5   top10
+independent              0.324    0.00    0.80    0.60
+referential              0.336    0.00    0.60    0.70
+conflicting              0.278    0.00    0.60    0.70
+cross_inferential        0.410    0.00    0.80    0.80

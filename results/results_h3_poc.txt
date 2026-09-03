@@ -1,0 +1,42 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading Qwen/Qwen2.5-0.5B ...
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  18%|#7        | 52/290 [00:00<00:00, 514.86it/s]Loading weights:  42%|####2     | 123/290 [00:00<00:00, 587.61it/s]Loading weights:  63%|######2   | 182/290 [00:00<00:00, 491.81it/s]Loading weights:  80%|########  | 233/290 [00:00<00:00, 435.62it/s]Loading weights:  97%|#########6| 281/290 [00:00<00:00, 442.24it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 477.69it/s]
+
+Collecting (V_composed_B, V_full_B) pairs at layer L12 ...
+  ex  0 (independent        #0): 38 samples
+  ex  1 (independent        #1): 30 samples
+  ex  2 (independent        #2): 18 samples
+  ex  3 (independent        #3): 26 samples
+  ex  4 (independent        #4): 26 samples
+  ex  5 (referential        #0): 28 samples
+  ex  6 (referential        #1): 18 samples
+  ex  7 (referential        #2): 26 samples
+  ex  8 (referential        #3): 28 samples
+  ex  9 (referential        #4): 20 samples
+  ex 10 (conflicting        #0): 24 samples
+  ex 11 (conflicting        #1): 26 samples
+  ex 12 (conflicting        #2): 24 samples
+  ex 13 (conflicting        #3): 26 samples
+  ex 14 (conflicting        #4): 22 samples
+  ex 15 (cross_inferential  #0): 38 samples
+  ex 16 (cross_inferential  #1): 38 samples
+  ex 17 (cross_inferential  #2): 28 samples
+  ex 18 (cross_inferential  #3): 26 samples
+  ex 19 (cross_inferential  #4): 26 samples
+
+Total samples: N = 536, dim = 64
+Examples: 20, train/test split = leave-N-out at example level
+
+fold     baseline cos     corrected cos     delta
+0              0.6265            0.6161   -0.0104
+1              0.5829            0.6184   +0.0355
+2              0.5982            0.6434   +0.0452
+3              0.6707            0.6581   -0.0125
+4              0.5972            0.6372   +0.0400
+
+MEAN           0.6151            0.6346   +0.0195
+
+============================================================
+H3 POC verdict (layer L12):
+  MARGINAL: tiny improvement 0.0195. Linear too simple, but direction correct.
+============================================================

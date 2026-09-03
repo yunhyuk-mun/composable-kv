@@ -1,0 +1,32 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading Qwen/Qwen2.5-0.5B ...
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<02:18,  2.09it/s]Loading weights:  18%|#7        | 52/290 [00:00<00:02, 106.63it/s]Loading weights:  26%|##5       | 75/290 [00:00<00:01, 115.70it/s]Loading weights:  32%|###2      | 93/290 [00:00<00:01, 121.25it/s]Loading weights:  38%|###8      | 111/290 [00:01<00:01, 125.62it/s]Loading weights:  55%|#####4    | 159/290 [00:01<00:00, 194.92it/s]Loading weights:  66%|######5   | 191/290 [00:01<00:00, 224.51it/s]Loading weights:  76%|#######5  | 219/290 [00:01<00:00, 238.53it/s]Loading weights:  85%|########4 | 246/290 [00:01<00:00, 245.85it/s]Loading weights:  96%|#########6| 279/290 [00:01<00:00, 262.52it/s]Loading weights: 100%|##########| 290/290 [00:01<00:00, 180.65it/s]
+
+Sanity check: A-portion in full should ~= A alone (cos ~1.0)
+  independent          mean K cos = 1.0000
+  referential          mean K cos = 1.0000
+  conflicting          mean K cos = 1.0000
+  cross_inferential    mean K cos = 1.0000
+
+Per-layer V cosine sim -- B alone vs B in full (PURE cross-context)
+condition           L0  L1  L2  L3  L4  L5  L6  L7  L8  L9  L10 L11 L12 L13 L14 L15 L16 L17 L18 L19 L20 L21 L22 L23 
+independent         1.00 0.99 0.97 0.88 0.88 0.87 0.87 0.87 0.87 0.84 0.80 0.78 0.69 0.68 0.71 0.76 0.90 0.89 0.83 0.79 0.87 0.87 0.83 0.81 
+referential         1.00 0.98 0.97 0.86 0.86 0.82 0.79 0.82 0.80 0.80 0.72 0.74 0.63 0.72 0.75 0.78 0.88 0.85 0.82 0.80 0.83 0.85 0.83 0.83 
+conflicting         1.00 0.98 0.95 0.82 0.81 0.78 0.79 0.80 0.80 0.80 0.68 0.71 0.56 0.60 0.59 0.72 0.83 0.83 0.76 0.73 0.79 0.80 0.77 0.78 
+cross_inferential   1.00 0.99 0.96 0.86 0.85 0.81 0.83 0.85 0.84 0.84 0.71 0.79 0.61 0.68 0.73 0.79 0.88 0.87 0.79 0.76 0.85 0.85 0.82 0.78 
+
+Per-layer K cosine sim -- B alone vs B in full (position + cross-context)
+condition           L0  L1  L2  L3  L4  L5  L6  L7  L8  L9  L10 L11 L12 L13 L14 L15 L16 L17 L18 L19 L20 L21 L22 L23 
+independent         0.96 0.94 0.99 0.87 0.85 0.77 0.69 0.72 0.75 0.83 0.78 0.86 0.76 0.78 0.81 0.76 0.79 0.81 0.71 0.71 0.84 0.81 0.89 0.92 
+referential         0.95 0.92 0.99 0.86 0.83 0.73 0.70 0.69 0.73 0.81 0.74 0.82 0.73 0.76 0.77 0.72 0.81 0.77 0.69 0.69 0.82 0.80 0.92 0.92 
+conflicting         0.99 0.95 0.99 0.88 0.84 0.75 0.74 0.74 0.80 0.82 0.78 0.82 0.76 0.75 0.79 0.75 0.77 0.78 0.71 0.74 0.80 0.81 0.92 0.93 
+cross_inferential   0.97 0.94 0.99 0.88 0.85 0.76 0.72 0.74 0.78 0.85 0.80 0.85 0.78 0.80 0.82 0.79 0.84 0.82 0.72 0.76 0.85 0.84 0.93 0.94 
+
+============================================================
+Mean cosine similarity across all layers
+============================================================
+condition                K (B vs full)     V (B vs full)
+independent                     0.8168            0.8440
+referential                     0.8002            0.8225
+conflicting                     0.8168            0.7773
+cross_inferential               0.8346            0.8226

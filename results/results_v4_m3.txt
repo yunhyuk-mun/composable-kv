@@ -1,0 +1,165 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading Qwen/Qwen2.5-0.5B ...
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  20%|#9        | 57/290 [00:00<00:00, 562.86it/s]Loading weights:  39%|###9      | 114/290 [00:00<00:00, 336.25it/s]Loading weights:  53%|#####2    | 153/290 [00:00<00:00, 269.47it/s]Loading weights:  63%|######3   | 184/290 [00:00<00:00, 204.46it/s]Loading weights:  72%|#######1  | 208/290 [00:00<00:00, 189.72it/s]Loading weights:  80%|#######9  | 231/290 [00:01<00:00, 173.83it/s]Loading weights:  88%|########7 | 255/290 [00:01<00:00, 170.40it/s]Loading weights:  95%|#########5| 276/290 [00:01<00:00, 178.92it/s]Loading weights: 100%|##########| 290/290 [00:01<00:00, 208.25it/s]
+
+======================================================================
+CONDITION: independent (n=5)
+======================================================================
+
+  Example 1: A=Alice is a doctor. She lives in Seoul and works at...
+    [M1_naive] KL=0.324 top1/5/10=0.00/0.80/0.60
+    [M2_rope] KL=0.271 top1/5/10=1.00/0.80/0.90
+    [M3_ex_mid] KL=0.214 top1/5/10=1.00/0.80/0.90
+
+  Example 2: A=Bob is a chef at a French restaurant in Tokyo....
+    [M1_naive] KL=0.542 top1/5/10=0.00/0.60/0.60
+    [M2_rope] KL=0.645 top1/5/10=0.00/0.80/0.70
+    [M3_ex_mid] KL=0.638 top1/5/10=0.00/0.80/0.70
+
+  Example 3: A=Carol teaches physics at MIT....
+    [M1_naive] KL=0.193 top1/5/10=1.00/1.00/0.90
+    [M2_rope] KL=0.209 top1/5/10=1.00/0.80/0.70
+    [M3_ex_mid] KL=0.209 top1/5/10=1.00/0.80/0.70
+
+  Example 4: A=David is a musician who plays the violin professio...
+    [M1_naive] KL=0.532 top1/5/10=0.00/0.60/0.60
+    [M2_rope] KL=0.832 top1/5/10=0.00/0.60/0.50
+    [M3_ex_mid] KL=0.847 top1/5/10=0.00/0.60/0.50
+
+  Example 5: A=Eva works as a lawyer at a corporate firm in New Y...
+    [M1_naive] KL=0.097 top1/5/10=0.00/1.00/0.80
+    [M2_rope] KL=0.249 top1/5/10=1.00/0.80/0.70
+    [M3_ex_mid] KL=0.268 top1/5/10=1.00/0.80/0.60
+
+  --- independent aggregated (n=5) ---
+    M1_naive:  KL=0.338+/-0.199  top1=0.20  top5=0.80  top10=0.70
+    M2_rope:  KL=0.441+/-0.280  top1=0.60  top5=0.76  top10=0.70
+    M3_ex_mid:  KL=0.435+/-0.291  top1=0.60  top5=0.76  top10=0.68
+
+======================================================================
+CONDITION: referential (n=5)
+======================================================================
+
+  Example 1: A=Alice is a doctor. She lives in Seoul and works at...
+    [M1_naive] KL=0.336 top1/5/10=0.00/0.60/0.70
+    [M2_rope] KL=0.524 top1/5/10=0.00/0.60/0.60
+    [M3_ex_mid] KL=0.499 top1/5/10=0.00/0.60/0.60
+
+  Example 2: A=Bob is a chef at a French restaurant in Tokyo....
+    [M1_naive] KL=0.290 top1/5/10=0.00/1.00/0.60
+    [M2_rope] KL=0.462 top1/5/10=0.00/0.80/0.50
+    [M3_ex_mid] KL=0.426 top1/5/10=0.00/0.80/0.50
+
+  Example 3: A=Carol is a CEO of a tech startup in Silicon Valley...
+    [M1_naive] KL=0.344 top1/5/10=0.00/0.60/0.70
+    [M2_rope] KL=0.846 top1/5/10=0.00/0.20/0.50
+    [M3_ex_mid] KL=0.865 top1/5/10=0.00/0.20/0.50
+
+  Example 4: A=David is a professional athlete on the national so...
+    [M1_naive] KL=0.239 top1/5/10=1.00/1.00/0.70
+    [M2_rope] KL=0.287 top1/5/10=1.00/0.80/0.70
+    [M3_ex_mid] KL=0.302 top1/5/10=1.00/0.80/0.60
+
+  Example 5: A=Eva is a writer known for her science fiction nove...
+    [M1_naive] KL=0.265 top1/5/10=1.00/0.80/0.70
+    [M2_rope] KL=0.438 top1/5/10=1.00/0.60/0.50
+    [M3_ex_mid] KL=0.374 top1/5/10=1.00/0.80/0.60
+
+  --- referential aggregated (n=5) ---
+    M1_naive:  KL=0.295+/-0.045  top1=0.40  top5=0.80  top10=0.68
+    M2_rope:  KL=0.511+/-0.206  top1=0.40  top5=0.60  top10=0.56
+    M3_ex_mid:  KL=0.493+/-0.220  top1=0.40  top5=0.64  top10=0.56
+
+======================================================================
+CONDITION: conflicting (n=5)
+======================================================================
+
+  Example 1: A=Alice is a doctor working at Samsung Medical Cente...
+    [M1_naive] KL=0.278 top1/5/10=0.00/0.60/0.70
+    [M2_rope] KL=0.212 top1/5/10=1.00/0.60/0.90
+    [M3_ex_mid] KL=0.210 top1/5/10=1.00/0.60/0.80
+
+  Example 2: A=Bob is a chef at a three-star Michelin restaurant ...
+    [M1_naive] KL=0.381 top1/5/10=0.00/0.80/0.60
+    [M2_rope] KL=0.259 top1/5/10=0.00/1.00/0.70
+    [M3_ex_mid] KL=0.304 top1/5/10=0.00/1.00/0.70
+
+  Example 3: A=Carol is a math teacher at a middle school in Seou...
+    [M1_naive] KL=0.272 top1/5/10=1.00/0.60/0.70
+    [M2_rope] KL=0.237 top1/5/10=1.00/0.60/0.70
+    [M3_ex_mid] KL=0.212 top1/5/10=1.00/0.80/0.70
+
+  Example 4: A=David is a commercial pilot for Korean Air based i...
+    [M1_naive] KL=0.210 top1/5/10=1.00/1.00/0.70
+    [M2_rope] KL=0.082 top1/5/10=1.00/1.00/0.70
+    [M3_ex_mid] KL=0.079 top1/5/10=1.00/1.00/0.70
+
+  Example 5: A=Eva is a jazz musician performing in clubs in Los ...
+    [M1_naive] KL=0.625 top1/5/10=0.00/0.80/0.80
+    [M2_rope] KL=0.558 top1/5/10=1.00/0.80/0.90
+    [M3_ex_mid] KL=0.531 top1/5/10=1.00/0.80/0.90
+
+  --- conflicting aggregated (n=5) ---
+    M1_naive:  KL=0.353+/-0.164  top1=0.40  top5=0.76  top10=0.70
+    M2_rope:  KL=0.270+/-0.175  top1=0.80  top5=0.80  top10=0.78
+    M3_ex_mid:  KL=0.267+/-0.168  top1=0.80  top5=0.84  top10=0.76
+
+======================================================================
+CONDITION: cross_inferential (n=5)
+======================================================================
+
+  Example 1: A=All doctors at Samsung Medical Center must complet...
+    [M1_naive] KL=0.410 top1/5/10=0.00/0.80/0.80
+    [M2_rope] KL=0.451 top1/5/10=0.00/0.80/0.80
+    [M3_ex_mid] KL=0.463 top1/5/10=0.00/0.80/0.80
+
+  Example 2: A=Lawyers at Kim and Chang complete their training i...
+    [M1_naive] KL=0.342 top1/5/10=0.00/0.80/0.80
+    [M2_rope] KL=0.242 top1/5/10=0.00/0.80/0.80
+    [M3_ex_mid] KL=0.253 top1/5/10=0.00/0.80/0.80
+
+  Example 3: A=Driver's licenses in Korea must be renewed every 1...
+    [M1_naive] KL=0.296 top1/5/10=0.00/0.60/0.90
+    [M2_rope] KL=0.405 top1/5/10=0.00/0.60/0.80
+    [M3_ex_mid] KL=0.432 top1/5/10=0.00/0.60/0.80
+
+  Example 4: A=US passports are valid for 10 years from the date ...
+    [M1_naive] KL=0.385 top1/5/10=0.00/0.80/0.80
+    [M2_rope] KL=0.539 top1/5/10=0.00/0.80/0.80
+    [M3_ex_mid] KL=0.574 top1/5/10=0.00/0.80/0.70
+
+  Example 5: A=Samsung electronics products come with a 3-year wa...
+    [M1_naive] KL=0.217 top1/5/10=0.00/0.60/0.80
+    [M2_rope] KL=0.358 top1/5/10=1.00/0.60/0.60
+    [M3_ex_mid] KL=0.348 top1/5/10=1.00/0.60/0.60
+
+  --- cross_inferential aggregated (n=5) ---
+    M1_naive:  KL=0.330+/-0.077  top1=0.00  top5=0.72  top10=0.82
+    M2_rope:  KL=0.399+/-0.110  top1=0.20  top5=0.72  top10=0.76
+    M3_ex_mid:  KL=0.414+/-0.121  top1=0.20  top5=0.72  top10=0.74
+
+======================================================================
+AGGREGATE SUMMARY (n=5 per condition) -- M1 vs M2
+======================================================================
+condition           method         KL mean    KL std    top1    top5   top10
+independent         M1_naive         0.338     0.199    0.20    0.80    0.70
+independent         M2_rope          0.441     0.280    0.60    0.76    0.70
+independent         M3_ex_mid        0.435     0.291    0.60    0.76    0.68
+referential         M1_naive         0.295     0.045    0.40    0.80    0.68
+referential         M2_rope          0.511     0.206    0.40    0.60    0.56
+referential         M3_ex_mid        0.493     0.220    0.40    0.64    0.56
+conflicting         M1_naive         0.353     0.164    0.40    0.76    0.70
+conflicting         M2_rope          0.270     0.175    0.80    0.80    0.78
+conflicting         M3_ex_mid        0.267     0.168    0.80    0.84    0.76
+cross_inferential   M1_naive         0.330     0.077    0.00    0.72    0.82
+cross_inferential   M2_rope          0.399     0.110    0.20    0.72    0.76
+cross_inferential   M3_ex_mid        0.414     0.121    0.20    0.72    0.74
+
+======================================================================
+BEST METHOD per condition (by lowest KL mean)
+======================================================================
+condition           best                KL    top1
+independent         M1_naive         0.338    0.20
+referential         M1_naive         0.295    0.40
+conflicting         M3_ex_mid        0.267    0.80
+cross_inferential   M1_naive         0.330    0.00
