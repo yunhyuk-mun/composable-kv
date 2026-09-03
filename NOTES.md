@@ -166,11 +166,14 @@ Learned corrector   → mid-layer V만 보정      (H3, 최소 비용)
 
 3. **referential은 M2 견고한 패** — top1 = 0.40 (변화 없음), KL 0.295 → 0.511 (심각). 5/5 예시에서 M2 KL이 M1보다 높음.
 
-4. **RoPE-shift의 조건부 우위:**
+4. **RoPE-shift의 metric-dependent 우위 (표현 재조정, per reviewer):**
    ```
-   낮은 A→B 의존도  → M2 우위      (independent 부분적, conflicting)
-   높은 A→B 의존도  → M2 열세      (referential, cross_inferential)
+   Top-1 기준:  M2가 4/4 조건에서 M1 이상 (referential은 tie)
+   KL 기준:     M2가 conflicting에서만 M1을 이김 (0.353→0.270)
+                independent/referential/cross_inferential는 KL 악화
    ```
+   → **top-1과 KL이 반대로 움직일 수 있음** (right argmax + wrong mass 이동).
+   단일 behavioral metric으로 method quality 판단 불가.
 
 **리뷰어 예측 완벽 empirical 확증:**
 - Referential에서 B의 "She"는 A의 Alice를 참조

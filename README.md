@@ -1,6 +1,6 @@
 # Composable KV
 
-**Independent prefill cache composition: decomposing failure into position mismatch and cross-context representation mismatch, and testing whether a small learned correction at mid-layer V can partially close the latter.**
+**A lightweight linear value-cache correction trained on held-out examples reduces next-token KL relative to the full-prefill oracle on a small controlled benchmark. The improvement is consistent across four context-relation conditions, but has not yet been validated at scale, across model families, or under realistic serving workloads.**
 
 An early-stage empirical study on Qwen-2.5-0.5B. Portfolio / research-in-progress; not yet a paper. Session 1 log lives in [NOTES.md](NOTES.md).
 
@@ -31,13 +31,17 @@ An early-stage empirical study on Qwen-2.5-0.5B. Portfolio / research-in-progres
 | **M4_naive_h3** | **0.311** | 0.30 | **0.79** |
 | **M5_rope_h3** | 0.370 | 0.50 | 0.76 |
 
-**Per-condition standout (conflicting):** M5 KL = 0.228, vs M1 0.353 (~35% reduction). RoPE-shift and H3 correction address different error sources and combine additively.
+**Main result (held-out, 5-fold example-level split):** A 64×64 linear map on layer-12 V, trained on 16 examples per fold, reduces downstream KL on the 4 held-out examples by 6.4% (M4 vs M1) and 9.4% (M5 vs M2), consistently across all four conditions. Held-out KL matches in-sample KL within 0.003, indicating the corrector generalizes at this sample size rather than memorizing.
 
-**RoPE-shift is conditional:** wins in low A→B dependency (independent, conflicting), loses in high (referential, cross_inferential). Position alignment cannot recover cross-context information.
+**How to read RoPE-shift (M2):**
+- By top-1 agreement, M2 improves on M1 in every condition except referential (a tie).
+- By KL, M2 improves on M1 only in **conflicting** (0.353 → 0.270); on independent, referential, and cross-inferential, KL actually **worsens** despite top-1 gains.
+- These two behavioral metrics can move in opposite directions — hitting the right argmax while shifting probability mass elsewhere.
+- Reading this as "RoPE-shift is conditional" (wins on some conditions, loses on others) is only true if you commit to a single metric. Reporting KL and top-1 side by side is more honest.
 
-**M3 (layer-selective) result:** Skipping RoPE-shift on mid layers alone did not improve over M2. Layer selection is not sufficient to work around the mid-layer V dip observed in layer-wise cosine analysis.
+**M3 (layer-selective RoPE-shift):** Skipping RoPE-shift on mid layers alone did not improve over full M2. Layer selection alone is not sufficient to address the mid-layer V mismatch — this does not disprove the mid-layer dip as a cause, only that this particular intervention doesn't help.
 
-**H3 held-out (5-fold, example-level split):** A 64×64 linear map trained on 16 examples reduces downstream KL on the 4 held-out examples by 6.4% (M4 vs M1) or 9.4% (M5 vs M2), across all 4 conditions. Held-out KL matches in-sample KL within 0.003 — the linear corrector generalizes rather than memorizing. On conflicting condition, M5 achieves top-1 = 1.00 on held-out (every held-out example's composed distribution picks the same top token as full-prefill).
+**Standout note:** On the conflicting condition alone, M5 (RoPE + H3) reaches held-out KL 0.228 and top-1 = 1.00 (every held-out example's composed distribution picks the same top token as full prefill). This is the strongest individual condition result, but the honest headline is the aggregate held-out reduction across all four conditions.
 
 ## Reproduction
 
@@ -90,13 +94,18 @@ composable-kv/
 └── results/               # Raw output logs from all runs
 ```
 
-## Limitations (be honest)
+## What this does not yet show
 
-- **Single model:** Qwen-2.5-0.5B only. Patterns should be re-checked on 1.5B+ where baselines are more reliable.
-- **Small n:** 5 examples per condition. Std dev is large; individual example effects visible.
-- **In-sample W:** H3 end-to-end trains W on the same examples it evaluates on. Held-out evaluation is required before treating the KL reduction as a main result.
-- **KL vs task metric:** When the baseline is degenerate (referential condition's empty output; cross-inferential's wrong arithmetic), low KL rewards matching the failure mode. Top-1 accuracy is a more honest primary metric in those conditions.
-- **Composition only tested at n=2:** Only two contexts combined. Longer chains (A + B + C ...) are unexplored.
+- **Scale.** All results are on Qwen-2.5-0.5B; larger models (1.5B, 7B, 70B) untested. Baseline itself is unreliable for referential and reasoning queries at this scale.
+- **Model family.** Only Qwen tested. Llama, Mistral, Gemma may respond differently to naive concat, RoPE-shift, and V correction.
+- **Real workloads.** Only 20 hand-crafted controlled examples. No RAG, no long-context, no realistic serving pattern.
+- **n.** 5 examples per condition. Standard deviations are large; individual example effects visible in the raw logs. `n=50+` per condition is a near-term priority.
+- **Cost.** The claim that a 64×64 linear map is "cheap" is not yet backed by FLOP/latency/memory numbers vs full B prefill.
+- **Corrector expressivity.** Only one target layer (L12) and only a linear map. Whether MLP + A-context conditioning further reduces KL, or whether multi-layer application accumulates gains, is untested.
+- **Composition depth.** Only two contexts combined (A + B). Chains (A + B + C ...) are unexplored.
+- **Metric behavior.** KL and top-1 can move in opposite directions (see "How to read RoPE-shift" above). Reporting one alone would be misleading.
+
+None of these blockers is fatal to the direction; each is the subject of a concrete follow-up in the Session 2 priority list at the bottom.
 
 ## Related Work (stub, to be expanded)
 
@@ -108,16 +117,23 @@ composable-kv/
 
 ## Project Status
 
-- [x] MVE with 4 controlled conditions × 5 examples
+**Done in Session 1:**
+- [x] MVE with 4 controlled conditions × 5 examples (n=20)
 - [x] Layer-wise K/V divergence analysis
 - [x] RoPE-shifted baseline (M2) and layer-selective variant (M3)
 - [x] Linear H3 corrector: 5-fold CV representation + in-sample end-to-end
-- [x] **Held-out H3 evaluation** (5-fold example-level split): -6.4%/-9.4% KL, generalizes cleanly
-- [ ] MLP + A-context-conditional corrector
-- [ ] Extend corrector to all mid-layers (L10-L15)
-- [ ] Qwen-2.5-1.5B scale-up
-- [ ] n=50+ examples per condition
-- [ ] Pareto measurement (quality vs FLOP / latency)
+- [x] Held-out H3 evaluation (5-fold example-level split): -6.4% / -9.4% KL, matches in-sample within 0.003
+
+**Session 2 priority (before scaling model or corrector expressivity):**
+- [ ] Document cache-injection sanity checks (KV_full round-trip KL ≈ 0; attention_mask / cache_position policy)
+- [ ] Scale n to 20~30 examples per condition, with entity / length / template variation to reduce leakage
+- [ ] Measure H3 cost: FLOPs, latency, peak memory of the 64×64 map vs full B prefill
+- [ ] Reproduce main held-out numbers on Qwen-2.5-1.5B where baselines are more reliable
+
+**Then (contingent on the above):**
+- [ ] MLP + A-context-conditional corrector (only if scale doesn't already close the gap linearly)
+- [ ] Extend corrector to all mid-layers L10-L15 (only after measuring per-layer marginal gain)
+- [ ] Pareto measurement (quality vs FLOP / latency, needed for any composition claim)
 
 ## License
 
