@@ -18,9 +18,9 @@
     citecolor=blue,
 }
 
-\title{Composable KV: Decomposing Independent Prefill Cache Composition Errors\\ into Position and Cross-Context Mismatch, and Partially Closing the Latter\\ with a Lightweight Value Corrector}
+\title{Composable KV:\\ Position Alignment and Lightweight Value Correction\\ for Independent LLM Prefill Cache Composition}
 
-\author[1]{Yoonh Moon\thanks{\texttt{moonyoonh91@gmail.com}}}
+\author[1]{Mun Yunhyuk\thanks{\texttt{moonyoonh91@gmail.com}}}
 \affil[1]{Independent research}
 
 \date{\today}
@@ -29,7 +29,7 @@
 \maketitle
 
 \begin{abstract}
-Large language model serving increasingly relies on caching independent prefix key--value (KV) representations for reuse across queries. Composing two independently prefilled caches, however, yields degraded next-token behavior compared to a full joint prefill. We formalize this degradation as the sum of a \emph{position mismatch} (rotary encoding assumes each token's absolute index) and a \emph{cross-context representation mismatch} (each cache never attended to the other), and study the two error sources separately on Qwen-2.5-0.5B. Positional alignment via RoPE-shift improves top-1 agreement with the full-prefill baseline in three of four controlled conditions but does not uniformly reduce Kullback--Leibler divergence to the oracle, demonstrating that the two behavioral metrics can diverge. A layer-selective RoPE-shift (skipping mid layers where the per-layer value cosine drops most) yields no improvement over full RoPE-shift, indicating that layer selection alone does not close the mid-layer gap. We introduce a single $64\times64$ linear map applied to the middle-layer value cache, trained by ridge-regularized least squares to predict the full-prefill value from the independent value. Across four cross-validated folds at the example level of a $20$-example controlled benchmark, the corrector reduces held-out downstream next-token KL by 6.4\% on naive concatenation and 9.4\% on RoPE-shifted concatenation, and reduces KL on each of the four conditions; in-sample and held-out KL agree within $3\times10^{-3}$. The correction adds approximately $0.34$ ms of wall-clock and $\sim 0.0021\%$ of the FLOPs of one full $B$-prefill. All numbers are supported by a set of pipeline sanity checks (cache round-trip KL $\approx 3\times10^{-7}$, RoPE-shift-by-zero is exact identity, prefill is deterministic, and the $A$-portion of the joint cache matches the standalone $A$ prefill within float32 precision). We frame this as a proof of feasibility on a small controlled benchmark, with concrete follow-ups toward scale, model families, and realistic serving workloads.
+Large language model serving increasingly relies on caching independent prefix key--value (KV) representations for reuse across queries. Composing two independently prefilled caches, however, yields degraded next-token behavior compared to a full joint prefill. We conceptually separate this degradation into two error sources -- a \emph{position mismatch} (rotary encoding assumes each token's absolute index) and a \emph{cross-context representation mismatch} (each cache never attended to the other), and study the two error sources separately on Qwen-2.5-0.5B. Positional alignment via RoPE-shift improves top-1 agreement with the full-prefill baseline in three of four controlled conditions but does not uniformly reduce Kullback--Leibler divergence to the oracle, demonstrating that the two behavioral metrics can diverge. A layer-selective RoPE-shift (skipping mid layers where the per-layer value cosine drops most) yields no improvement over full RoPE-shift, indicating that layer selection alone does not close the mid-layer gap. We introduce a single $64\times64$ linear map applied to the middle-layer value cache, trained by ridge-regularized least squares to predict the full-prefill value from the independent value. Across four cross-validated folds at the example level of a $20$-example controlled benchmark, the corrector reduces held-out downstream next-token KL by 6.4\% on naive concatenation and 9.4\% on RoPE-shifted concatenation, and reduces KL on each of the four conditions; in-sample and held-out KL agree within $3\times10^{-3}$, suggesting that the corrector transfers to held-out examples within this benchmark rather than fitting to specific training instances. The correction adds approximately $0.34$ ms of wall-clock and $\sim 0.0021\%$ of the FLOPs of one full $B$-prefill. All numbers are supported by a set of pipeline sanity checks (cache round-trip KL $\approx 3\times10^{-7}$, RoPE-shift-by-zero is exact identity, prefill is deterministic, and the $A$-portion of the joint cache matches the standalone $A$ prefill within float32 precision). We frame this as a proof of feasibility on a small controlled benchmark, with concrete follow-ups toward scale, model families, and realistic serving workloads.
 \end{abstract}
 
 \section{Introduction}
@@ -49,10 +49,10 @@ This paper asks: \emph{on a small controlled benchmark, does a low-cost learned 
 
 \paragraph{Contributions.}
 \begin{itemize}[leftmargin=*]
-    \item We formalize the composition error decomposition, and design four controlled conditions (independent, referential, conflicting, cross-inferential) that vary the degree to which $B$ semantically depends on $A$.
+    \item We articulate two conceptually distinct error sources (position mismatch and cross-context representation mismatch) and design four controlled conditions (independent, referential, conflicting, cross-inferential) that vary the degree to which $B$ semantically depends on $A$.
     \item We provide layer-wise per-head analysis of both key and value divergence between independent-prefill $B$ and joint-prefill $B$, showing a mid-layer dip in value cosine that is consistent with the general observation that middle layers perform semantic integration.
     \item We test whether layer selection alone can route around the mid-layer damage (Method M3) and find no improvement over full RoPE-shift, motivating a learned intervention.
-    \item We introduce a single $64\times64$ linear map on the layer-12 value cache and show, on a 5-fold example-level held-out split of a 20-example benchmark, that it reduces downstream next-token KL by 6.4--9.4\% relative to un-corrected baselines, and reduces KL on each of the four conditions in this benchmark. In-sample and held-out KL agree within $3\times10^{-3}$, indicating the linear corrector is not memorizing at this sample size.
+    \item We introduce a single $64\times64$ linear map on the layer-12 value cache and show, on a 5-fold example-level held-out split of a 20-example benchmark, that it reduces downstream next-token KL by 6.4--9.4\% relative to un-corrected baselines, and reduces KL on each of the four conditions in this benchmark. In-sample and held-out KL agree within $3\times10^{-3}$, suggesting transfer to held-out examples within this benchmark (rather than a stronger claim of generalization, which would require entity- or template-disjoint splits).
     \item We quantify wall-clock and FLOP cost, showing the corrector is approximately $0.0021\%$ of a single $B$-prefill in FLOPs, and validate the cache-injection pipeline against a $\sim 3\times10^{-7}$ KL noise floor.
     \item We are explicit about what these results \emph{do not} yet show: single model (0.5B), single family (Qwen), $n=20$ controlled examples, no realistic serving workload, no MLP or multi-layer corrector.
 \end{itemize}
@@ -163,7 +163,7 @@ M5 (RoPE-shift + H3)     & 0.367 & 0.196 & \textbf{0.55} & 0.75 & 0.70 \\
 
 \paragraph{Layer selection alone does not close the mid-layer gap.} M3 differs from M2 only at layers L10--L15, and yet the aggregate difference is within one standard deviation for every condition. The mid-layer value dip is at most a symptom, not an intervention target that layer selection alone can address.
 
-\subsection{Held-out generalization of H3}\label{sec:holdout}
+\subsection{Held-out transfer of H3 within the benchmark}\label{sec:holdout}
 
 We train $W \in \mathbb{R}^{64\times64}$ by ridge-regularized least squares (ridge $10^{-4}$) on the layer-12 value pairs across the training portion of a 5-fold example-level split, holding out four examples per fold. Table~\ref{tab:holdout} reports held-out mean KL for each of the four conditions.
 
@@ -186,7 +186,7 @@ $\Delta$ vs base   &       & $-6.4\%$ &       & $-9.4\%$ \\
 \end{tabular}
 \end{table}
 
-The held-out corrector matches its in-sample counterpart within $3\times10^{-3}$ KL, indicating that the linear map generalizes across held-out examples rather than memorizing the training set. On the conflicting condition, M5 achieves top-1 agreement $1.00$ on held-out (every held-out example's composed distribution places the same token first as the full-prefill oracle).
+The held-out corrector matches its in-sample counterpart within $3\times10^{-3}$ KL, indicating that the improvement transfers to held-out examples within this benchmark (stronger claims of generalization would require entity- or template-disjoint splits, deferred to future work). On the conflicting condition, M5 achieves top-1 agreement $1.00$ on held-out (every held-out example's composed distribution places the same token first as the full-prefill oracle).
 
 \subsection{Cost}\label{sec:cost}
 
@@ -194,7 +194,7 @@ Wall-clock measurements on CPU (median of five runs, $|B|=19$) are reported in T
 
 \begin{table}[t]
 \centering
-\caption{Wall-clock cost of composition on CPU, relative to a single $B$-prefill forward. H3 correction is a $64\times64$ matmul at a single layer.}
+\caption{Wall-clock cost of composition on CPU, relative to a single $B$-prefill forward. Setup: Qwen-2.5-0.5B, CPU (single-thread PyTorch), $|B|=19$ tokens, $\mathrm{KV}_A$ and $\mathrm{KV}_B$ already computed and in memory (KV storage / transfer costs are not measured). H3 correction is a $64\times64$ matmul at a single layer. Numbers are the median of 5 runs.}
 \label{tab:cost}
 \begin{tabular}{lrr}
 \toprule
@@ -208,6 +208,13 @@ M5 RoPE-shift + H3 correction   &  13.4 &   3.90 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.75\textwidth]{pareto.pdf}
+\caption{Quality--cost trade-off across composition methods. Held-out next-token KL (Table~\ref{tab:holdout} aggregate) versus composition wall-clock (Table~\ref{tab:cost}) on Qwen-2.5-0.5B, CPU, $|B|=19$. Green arrow: M1 $\to$ M4 (naive + H3). Purple arrow: M2 $\to$ M5 (RoPE + H3). At either cost point, adding H3 moves the operating point downward at approximately fixed compute (composition-only view; setup assumes $\mathrm{KV}_A, \mathrm{KV}_B$ already computed and in memory).}
+\label{fig:pareto}
+\end{figure}
 
 \section{Discussion}
 
@@ -236,7 +243,7 @@ None of these blockers is fatal to the direction; each is the subject of a concr
 
 \section{Conclusion}
 
-We decomposed the error of independent-prefill KV composition into a position component and a cross-context representation component, and showed on a $20$-example controlled benchmark that a single $64\times64$ linear map on the mid-layer value cache reduces held-out downstream next-token KL by $6.4$--$9.4\%$ in aggregate and reduces KL on each of the four conditions. The corrector generalizes from 16 training to 4 held-out examples per fold within $3\times10^{-3}$ KL, and adds approximately $0.34$ ms and $0.0021\%$ of the FLOPs of one $B$-prefill. Scaling the benchmark, reproducing on larger and more diverse models, and testing more expressive correctors are the natural next steps.
+We separately analyzed two conceptual error sources of independent-prefill KV composition -- a position component fixable by RoPE-shift, and a cross-context representation component that is not -- and showed on a $20$-example controlled benchmark that a single $64\times64$ linear map on the mid-layer value cache reduces held-out downstream next-token KL by $6.4$--$9.4\%$ in aggregate and reduces KL on each of the four conditions. The corrector generalizes from 16 training to 4 held-out examples per fold within $3\times10^{-3}$ KL, and adds approximately $0.34$ ms and $0.0021\%$ of the FLOPs of one $B$-prefill. Scaling the benchmark, reproducing on larger and more diverse models, and testing more expressive correctors are the natural next steps.
 
 \paragraph{Code and reproduction.} All code, data conditions, raw result logs, sanity checks, and cost measurements are released at \url{https://github.com/yunhyuk-mun/composable-kv} under an MIT license.
 
@@ -255,8 +262,9 @@ We report four sanity checks against which every downstream number in this paper
     \item \textbf{RoPE-shift(0)} is the identity map on $K$. Result: maximum $|K - R(0)K|$ over all 24 layers is $0.0$ (exact).
     \item \textbf{Determinism}: two independent prefill runs of the same input produce bitwise-identical $K$ and $V$. Result: exact.
     \item \textbf{Causal $A$-portion}: because the joint prefill is causal, tokens in $A$ cannot attend to $B$; their contribution to the joint cache should equal the $A$-alone cache. Result: maximum $|K^{(l)}_{\text{full}, :|A|} - K^{(l)}_A|$ is $1.53\times10^{-5}$, and similarly $5.25\times10^{-6}$ for $V$. This is at the expected float32 precision floor.
+    \item \textbf{Tokenization boundary drift} (informational, not pass/fail). We compare the token id sequence produced by $\mathrm{tokenize}(A) + \mathrm{tokenize}(B) + \mathrm{tokenize}(Q)$ (used by the composition path) against the sequence produced by $\mathrm{tokenize}(A + \text{`` ''} + B + Q)$ (used by the ``from-scratch'' baseline path in \texttt{mve.py} and by \texttt{h3\_holdout.py}'s $p_{\text{full}}$). Result: 20/20 examples exhibit a boundary-length difference of $1$--$2$ tokens; where lengths coincidentally match, the interior token ids are identical. \emph{Consequence.} The absolute KL numbers in Tables~\ref{tab:main} and~\ref{tab:holdout} contain a small BPE-boundary artifact in addition to the composition error. Because every composition method is compared against the same baseline and shares the same drift, the \emph{relative} deltas ($\Delta$KL between methods) remain the intended measurement. A follow-up experiment enforcing identical token ids on both paths will refine the absolute magnitudes.
 \end{enumerate}
 
-Because the observed downstream method deltas (Table~\ref{tab:main}) are on the order of $10^{-2}$ KL, they are approximately $10^5$ times the round-trip noise floor, and their attribution to composition behavior (rather than injection artifacts) is safe.
+Because the observed downstream method deltas (Table~\ref{tab:main}) are on the order of $10^{-2}$ KL, they are approximately $10^5$ times the round-trip noise floor, and their attribution to composition behavior (rather than injection artifacts) is safe. Check 5 above documents a small tokenization drift that affects absolute KL magnitudes but not the between-method deltas that this paper's claims are stated in.
 
 \end{document}

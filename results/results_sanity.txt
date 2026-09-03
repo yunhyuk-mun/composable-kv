@@ -1,6 +1,6 @@
 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
 Loading Qwen/Qwen2.5-0.5B ...
-Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  22%|##2       | 65/290 [00:00<00:00, 577.26it/s]Loading weights:  42%|####2     | 123/290 [00:00<00:00, 533.07it/s]Loading weights:  61%|######1   | 177/290 [00:00<00:00, 528.92it/s]Loading weights:  79%|#######9  | 230/290 [00:00<00:00, 485.22it/s]Loading weights:  96%|#########6| 279/290 [00:00<00:00, 467.21it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 504.87it/s]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  20%|##        | 59/290 [00:00<00:00, 576.87it/s]Loading weights:  40%|####      | 117/290 [00:00<00:00, 378.60it/s]Loading weights:  58%|#####7    | 167/290 [00:00<00:00, 420.86it/s]Loading weights:  73%|#######3  | 213/290 [00:00<00:00, 429.96it/s]Loading weights:  89%|########9 | 259/290 [00:00<00:00, 403.05it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 424.72it/s]
 
 [Check 1] KV round-trip: prefill(prefix) then query, vs prefill(prefix+query)
   (using identical token ids on both paths)
@@ -19,6 +19,12 @@ Loading Qwen/Qwen2.5-0.5B ...
   Max K diff: 1.53e-05, Max V diff: 5.25e-06
   Verdict: PASS (float32 precision ~1e-5)
 
+[Check 5] Tokenization: tokenize(A)+tokenize(B)+tokenize(Q) vs tokenize(A+' '+B+Q)
+  examples with length mismatch: 20/20
+  max length difference (tokens): 2
+  max positional token diffs (when lengths match): 0
+  Verdict: INFORMATIONAL (boundary drift present)
+
 ============================================================
 SANITY SUMMARY
 ============================================================
@@ -26,5 +32,9 @@ SANITY SUMMARY
   rope-shift(0) max diff: 0.00e+00   (< 1e-5 expected)
   determinism max diff:   0.00e+00   (< 1e-5 expected)
   A-portion max diff:     1.53e-05   (< 1e-4 expected, float32)
+  tokenize alignment:     20 length-mismatched examples, max len_diff=2, max pos_diffs=0
 
-  Pipeline sanity: ALL PASS
+  Pipeline sanity (checks 1-4): ALL PASS
+  Check 5 is informational: if boundary drift exists, downstream comparisons
+  should account for it. Both mve.py and h3_holdout.py use identical token ids
+  on both routes to avoid this confound in the main results.

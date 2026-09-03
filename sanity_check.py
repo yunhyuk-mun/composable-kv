@@ -135,6 +135,42 @@ def check_3_determinism(model, tokenizer):
     return max(max_k_diff, max_v_diff)
 
 
+def check_5_tokenization_alignment(model, tokenizer):
+    """Independent tokenize(A) + tokenize(B) + tokenize(Q) vs joint tokenize(A+" "+B+Q).
+
+    If they differ, KL diffs between composition and baseline paths may be
+    partially explained by token-boundary drift rather than composition error.
+    Reports the max token-count difference and, when lengths match, max
+    mismatched token positions across all 20 examples.
+    """
+    print("\n[Check 5] Tokenization: tokenize(A)+tokenize(B)+tokenize(Q) vs tokenize(A+' '+B+Q)")
+    n_length_mismatch = 0
+    max_len_diff = 0
+    max_pos_diffs = 0
+    n_examples = 0
+    for cond_name, exs in CONDITIONS.items():
+        for cond in exs:
+            n_examples += 1
+            ids_a = tokenizer(cond["A"], return_tensors="pt").input_ids
+            ids_b = tokenizer(cond["B"], return_tensors="pt").input_ids
+            ids_q = tokenizer(cond["query"], return_tensors="pt").input_ids
+            joint_ids = torch.cat([ids_a, ids_b, ids_q], dim=1)
+            direct_ids = tokenizer(cond["A"] + " " + cond["B"] + cond["query"], return_tensors="pt").input_ids
+
+            if joint_ids.shape[1] != direct_ids.shape[1]:
+                n_length_mismatch += 1
+                max_len_diff = max(max_len_diff, abs(joint_ids.shape[1] - direct_ids.shape[1]))
+            else:
+                pos_diffs = (joint_ids != direct_ids).sum().item()
+                max_pos_diffs = max(max_pos_diffs, pos_diffs)
+    print(f"  examples with length mismatch: {n_length_mismatch}/{n_examples}")
+    print(f"  max length difference (tokens): {max_len_diff}")
+    print(f"  max positional token diffs (when lengths match): {max_pos_diffs}")
+    ok = (n_length_mismatch == 0) and (max_pos_diffs == 0)
+    print(f"  Verdict: {'PASS (both routes identical)' if ok else 'INFORMATIONAL (boundary drift present)'}")
+    return (n_length_mismatch, max_len_diff, max_pos_diffs)
+
+
 def check_4_a_portion(model, tokenizer):
     print("\n[Check 4] A-portion of kv_full equals kv_a (causal attention)")
     ids_a = tokenizer(CONDITIONS['independent'][0]['A'], return_tensors="pt").input_ids
@@ -165,15 +201,20 @@ def main():
     r2 = check_2_rope_zero(model, tokenizer)
     r3 = check_3_determinism(model, tokenizer)
     r4 = check_4_a_portion(model, tokenizer)
+    r5 = check_5_tokenization_alignment(model, tokenizer)
 
     print(f"\n{'=' * 60}\nSANITY SUMMARY\n{'=' * 60}")
     print(f"  round-trip max KL:      {r1:.2e}   (< 1e-3 expected)")
     print(f"  rope-shift(0) max diff: {r2:.2e}   (< 1e-5 expected)")
     print(f"  determinism max diff:   {r3:.2e}   (< 1e-5 expected)")
     print(f"  A-portion max diff:     {r4:.2e}   (< 1e-4 expected, float32)")
+    print(f"  tokenize alignment:     {r5[0]} length-mismatched examples, max len_diff={r5[1]}, max pos_diffs={r5[2]}")
 
     ok = (r1 < 1e-3) and (r2 < 1e-5) and (r3 < 1e-5) and (r4 < 1e-4)
-    print(f"\n  Pipeline sanity: {'ALL PASS' if ok else 'FAILURE - do not trust downstream numbers'}")
+    print(f"\n  Pipeline sanity (checks 1-4): {'ALL PASS' if ok else 'FAILURE - do not trust downstream numbers'}")
+    print(f"  Check 5 is informational: if boundary drift exists, downstream comparisons\n"
+          f"  should account for it. Both mve.py and h3_holdout.py use identical token ids\n"
+          f"  on both routes to avoid this confound in the main results.")
 
 
 if __name__ == "__main__":

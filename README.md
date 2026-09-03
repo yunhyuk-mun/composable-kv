@@ -157,4 +157,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## Contact
 
-Yoonh Moon · [moonyoonh91@gmail.com](mailto:moonyoonh91@gmail.com)
+Mun Yunhyuk · [moonyoonh91@gmail.com](mailto:moonyoonh91@gmail.com)
