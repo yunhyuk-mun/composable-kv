@@ -12,36 +12,15 @@ Metrics:
   3. Greedy answer (qualitative)
 """
 
+import statistics
 import torch
 import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
 
+from conditions import CONDITIONS
+
 MODEL_NAME = "Qwen/Qwen2.5-0.5B"
 ROPE_THETA = 1000000.0
-
-
-CONDITIONS = {
-    "independent": {
-        "A": "Alice is a doctor. She lives in Seoul and works at Samsung Medical Center.",
-        "B": "The capital of France is Paris. It has a population of about 2.1 million.",
-        "query": "\nQuestion: What does Alice do?\nAnswer:",
-    },
-    "referential": {
-        "A": "Alice is a doctor. She lives in Seoul and works at Samsung Medical Center.",
-        "B": "She recently published a paper on cardiac surgery in the New England Journal.",
-        "query": "\nQuestion: Who published a paper on cardiac surgery?\nAnswer:",
-    },
-    "conflicting": {
-        "A": "Alice is a doctor working at Samsung Medical Center in Seoul.",
-        "B": "Alice is a software engineer at Naver in Bundang.",
-        "query": "\nQuestion: What does Alice do?\nAnswer:",
-    },
-    "cross_inferential": {
-        "A": "All doctors at Samsung Medical Center must complete residency within 5 years.",
-        "B": "Alice is a doctor at Samsung Medical Center who started her residency in 2020.",
-        "query": "\nQuestion: By what year at the latest must Alice complete her residency?\nAnswer:",
-    },
-}
 
 
 def load_model():
@@ -177,43 +156,71 @@ def evaluate_method(model, tokenizer, cond, method_name, compose_fn):
     }
 
 
-def run_condition(model, tokenizer, name, cond):
-    print(f"\n{'-' * 60}\nCONDITION: {name}\n{'-' * 60}")
-    print(f"A: {cond['A']}")
-    print(f"B: {cond['B']}")
-    print(f"Q: {cond['query'].strip()}")
+METHODS = {
+    "M1_naive": lambda a, b, la: naive_concat_kv(a, b),
+    "M2_rope":  lambda a, b, la: rope_shifted_concat_kv(a, b, la),
+}
 
-    methods = {
-        "M1_naive":   lambda a, b, la: naive_concat_kv(a, b),
-        "M2_rope":    lambda a, b, la: rope_shifted_concat_kv(a, b, la),
-    }
-    method_results = []
-    for name_m, fn in methods.items():
-        r = evaluate_method(model, tokenizer, cond, name_m, fn)
-        method_results.append(r)
-        print(f"  [{name_m}] KL={r['kl']:.4f}  top1/5/10={r['t1']:.2f}/{r['t5']:.2f}/{r['t10']:.2f}")
-        print(f"    answer: {r['comp']!r}")
-    print(f"  [BASELINE] answer: {method_results[0]['base']!r}")
-    return {"cond": name, "methods": method_results}
+
+def run_condition_set(model, tokenizer, name, examples):
+    print(f"\n{'=' * 70}\nCONDITION: {name} (n={len(examples)})\n{'=' * 70}")
+    per_method = {m: {"kl": [], "t1": [], "t5": [], "t10": []} for m in METHODS}
+    per_example = []
+
+    for i, cond in enumerate(examples):
+        print(f"\n  Example {i+1}: A={cond['A'][:50]}...")
+        row = {"example": i}
+        for m_name, fn in METHODS.items():
+            r = evaluate_method(model, tokenizer, cond, m_name, fn)
+            for k in ("kl", "t1", "t5", "t10"):
+                per_method[m_name][k].append(r[k])
+            row[m_name] = r
+            print(f"    [{m_name}] KL={r['kl']:.3f} top1/5/10={r['t1']:.2f}/{r['t5']:.2f}/{r['t10']:.2f}")
+        per_example.append(row)
+
+    print(f"\n  --- {name} aggregated (n={len(examples)}) ---")
+    for m in METHODS:
+        vals = per_method[m]
+        kl_m = statistics.mean(vals["kl"])
+        kl_s = statistics.stdev(vals["kl"]) if len(vals["kl"]) > 1 else 0.0
+        t1_m = statistics.mean(vals["t1"])
+        t5_m = statistics.mean(vals["t5"])
+        t10_m = statistics.mean(vals["t10"])
+        print(f"    {m}:  KL={kl_m:.3f}+/-{kl_s:.3f}  top1={t1_m:.2f}  top5={t5_m:.2f}  top10={t10_m:.2f}")
+
+    return {"cond": name, "per_method": per_method, "per_example": per_example}
 
 
 def main():
     print(f"Loading {MODEL_NAME} ...")
     model, tokenizer = load_model()
 
-    results = [run_condition(model, tokenizer, n, c) for n, c in CONDITIONS.items()]
+    results = [run_condition_set(model, tokenizer, n, exs) for n, exs in CONDITIONS.items()]
 
-    print(f"\n{'=' * 60}\nSUMMARY -- M1 (naive concat) vs M2 (RoPE-shifted concat)\n{'=' * 60}")
-    print(f"{'condition':<20}{'method':<12}{'KL':>10}{'top1':>8}{'top5':>8}{'top10':>8}")
+    print(f"\n{'=' * 70}\nAGGREGATE SUMMARY (n=5 per condition) -- M1 vs M2\n{'=' * 70}")
+    print(f"{'condition':<20}{'method':<12}{'KL mean':>10}{'KL std':>10}{'top1':>8}{'top5':>8}{'top10':>8}")
     for r in results:
-        for m in r["methods"]:
-            print(f"{r['cond']:<20}{m['method']:<12}{m['kl']:>10.3f}{m['t1']:>8.2f}{m['t5']:>8.2f}{m['t10']:>8.2f}")
+        for m in METHODS:
+            vals = r["per_method"][m]
+            kl_m = statistics.mean(vals["kl"])
+            kl_s = statistics.stdev(vals["kl"]) if len(vals["kl"]) > 1 else 0.0
+            print(f"{r['cond']:<20}{m:<12}{kl_m:>10.3f}{kl_s:>10.3f}"
+                  f"{statistics.mean(vals['t1']):>8.2f}"
+                  f"{statistics.mean(vals['t5']):>8.2f}"
+                  f"{statistics.mean(vals['t10']):>8.2f}")
 
-    print(f"\n{'=' * 60}\nDELTA (M2 - M1)\n{'=' * 60}")
-    print(f"{'condition':<20}{'dKL':>10}{'dTop1':>8}{'dTop5':>8}{'dTop10':>8}")
+    print(f"\n{'=' * 70}\nDELTA M2 - M1 (positive dTop1 = M2 wins)\n{'=' * 70}")
+    print(f"{'condition':<20}{'dKL':>10}{'dTop1':>10}{'dTop5':>10}{'dTop10':>10}")
     for r in results:
-        m1, m2 = r["methods"][0], r["methods"][1]
-        print(f"{r['cond']:<20}{m2['kl']-m1['kl']:>10.3f}{m2['t1']-m1['t1']:>8.2f}{m2['t5']-m1['t5']:>8.2f}{m2['t10']-m1['t10']:>8.2f}")
+        m1_kl = statistics.mean(r["per_method"]["M1_naive"]["kl"])
+        m2_kl = statistics.mean(r["per_method"]["M2_rope"]["kl"])
+        m1_t1 = statistics.mean(r["per_method"]["M1_naive"]["t1"])
+        m2_t1 = statistics.mean(r["per_method"]["M2_rope"]["t1"])
+        m1_t5 = statistics.mean(r["per_method"]["M1_naive"]["t5"])
+        m2_t5 = statistics.mean(r["per_method"]["M2_rope"]["t5"])
+        m1_t10 = statistics.mean(r["per_method"]["M1_naive"]["t10"])
+        m2_t10 = statistics.mean(r["per_method"]["M2_rope"]["t10"])
+        print(f"{r['cond']:<20}{m2_kl-m1_kl:>10.3f}{m2_t1-m1_t1:>10.2f}{m2_t5-m1_t5:>10.2f}{m2_t10-m1_t10:>10.2f}")
 
 
 if __name__ == "__main__":

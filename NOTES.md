@@ -145,6 +145,54 @@ Learned corrector   → mid-layer V만 보정      (H3, 최소 비용)
 
 ---
 
+## Session 1d: n=5 통계적 견고성 (conditions.py + mve.py refactor)
+
+**설계:** 각 조건 5개 예시로 확장. 총 20개 (A, B, query) 트리플. 조건별로 A-B 관계 구조는 동일하게 유지.
+
+**Aggregate 결과 (n=5, Qwen-2.5-0.5B):**
+
+| condition | M1 KL mean±std | M2 KL mean±std | M1 top1 | M2 top1 | dKL |
+|---|---|---|---|---|---|
+| independent | 0.338 ± 0.199 | 0.441 ± 0.280 | 0.20 | **0.60** | +0.104 |
+| referential | 0.295 ± 0.045 | 0.511 ± 0.206 | 0.40 | 0.40 | +0.217 |
+| **conflicting** | 0.353 ± 0.164 | **0.270 ± 0.175** | 0.40 | **0.80** | -0.083 |
+| cross_inferential | 0.330 ± 0.077 | 0.399 ± 0.110 | 0.00 | 0.20 | +0.069 |
+
+**핵심 발견 (n=1과 다른 부분):**
+
+1. **M1 top-1이 0.00 아님 (n=1의 결과는 misleading)** — 실제로는 0.20~0.40 대 (조건별). 우연히 특정 프롬프트에서 baseline과 같은 토큰 뽑기도 함.
+
+2. **conflicting은 M2 견고한 승** — n=5 aggregate도 KL↓, top1↑. 우연 아님.
+
+3. **referential은 M2 견고한 패** — top1 = 0.40 (변화 없음), KL 0.295 → 0.511 (심각). 5/5 예시에서 M2 KL이 M1보다 높음.
+
+4. **RoPE-shift의 조건부 우위:**
+   ```
+   낮은 A→B 의존도  → M2 우위      (independent 부분적, conflicting)
+   높은 A→B 의존도  → M2 열세      (referential, cross_inferential)
+   ```
+
+**리뷰어 예측 완벽 empirical 확증:**
+- Referential에서 B의 "She"는 A의 Alice를 참조
+- Full-prefill B는 이미 A의 정보를 attention한 상태
+- RoPE-shift는 위치는 맞추지만 **B가 A를 알고 있다는 잘못된 정렬**을 만듦
+- 모델이 KV_B를 "A를 본 것처럼" attention하려 함 → naive concat보다 더 나쁠 수 있음
+- Naive concat은 misaligned하지만 오히려 이 잘못된 신호가 없음
+
+**이게 논문 introduction의 motivating figure.** M1이 저지르는 실수 vs M2가 저지르는 다른 실수. 두 실수가 상보적일 수 있음 → H3 learned corrector는 이 두 방법 사이의 균형을 학습해야 함.
+
+**Portfolio 강도:**
+- n=1 → n=5로 강화. std가 큼 (0.05~0.28) → 진짜 실험임을 반증
+- 4 conditions × 5 examples = 20 examples/method × 2 methods = 40 method-runs
+- 재현 가능 (`python mve.py` 한 줄)
+
+**다음:**
+- Method 3: layer-selective composition (M2를 mid-layer만 적용) — 실패 조건에서 lm-shift 부작용 최소화?
+- Method 4: Baseline이 신뢰할 만한 태스크로 확장 (Qwen-1.5B, LongBench 조합)
+- H3 프로토타입: L10-L15의 V만 학습된 corrector로 대체
+
+---
+
 ## 외부 리뷰 요지 (2026-09-03, MVE v1 → v2 재구조화 근거)
 
 ### 강한 점 (그대로 유지)

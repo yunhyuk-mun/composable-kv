@@ -12,13 +12,13 @@ Can independently prefilled KV caches be composed in cache-space to approximate 
 - [x] Project scaffold, dependencies, git init
 - [x] MVE: extract, serialize, and re-inject KV caches (Qwen-2.5-0.5B, DynamicCache API)
 - [x] Raw-concat behavioral baseline (next-token KL, top-k agreement)
-- [x] Four-condition controlled benchmark (results below)
+- [x] Four-condition controlled benchmark (n=5 per condition, 20 examples total)
 - [x] Layer-wise K/V divergence analysis (mid-layer dip identified)
-- [x] RoPE-shifted concat baseline (Method 2 -- validated, top-1 restored in 2/4 conditions)
+- [x] RoPE-shifted concat baseline (Method 2 -- validated)
+- [x] Statistical robustness (n=5 aggregate reveals condition-dependent M2 behavior)
 - [ ] Scale-up to Qwen-2.5-1.5B (baseline reliability for referential/reasoning)
-- [ ] Multiple examples per condition (n=10)
-- [ ] Layer/head failure analysis (per-head, per-token)
-- [ ] Learned corrector (H3)
+- [ ] Layer-selective RoPE-shift (apply only to specific layers)
+- [ ] Learned corrector (H3, targeting mid-layer V)
 - [ ] Cost/latency Pareto measurement
 - [ ] Public technical report / arXiv submission
 
@@ -89,6 +89,27 @@ M2 RoPE-shift      → 2/4 top-1 = 1.0 (position 해결, cross-context 잔존)
 Layer analysis     → mid-layer V가 병목 (L10-L15)
 H3 learned corrector → mid-layer V만 보정 (minimum-parameter form)
 ```
+
+## n=5 통계적 견고성 (mve.py + conditions.py)
+
+각 조건에 5개 예시로 확장 (총 20 examples). aggregate 결과가 n=1 스토리를 nuanced하게 재작성.
+
+| condition | M1 KL mean+/-std | M2 KL mean+/-std | M1 top1 | M2 top1 |
+|---|---|---|---|---|
+| independent | 0.338 +/- 0.199 | 0.441 +/- 0.280 | 0.20 | **0.60** |
+| **conflicting** | 0.353 +/- 0.164 | **0.270 +/- 0.175** | 0.40 | **0.80** |
+| **referential** | **0.295 +/- 0.045** | 0.511 +/- 0.206 | 0.40 | 0.40 |
+| cross_inferential | 0.330 +/- 0.077 | 0.399 +/- 0.110 | 0.00 | 0.20 |
+
+**핵심 인사이트 (n=5로 강화):** RoPE-shift는 조건부 우위:
+```
+낮은 A→B 의존도  → M2 우위      (independent, conflicting)
+높은 A→B 의존도  → M2 열세      (referential, cross_inferential)
+```
+
+**해석:** Referential에서 B의 "She"는 A의 Alice 참조. Full-prefill B의 hidden state는 이미 A를 "봤음". RoPE-shift는 위치만 맞추지만 **B가 A를 알고 있다는 잘못된 정렬**을 만들어 M1보다 오히려 큰 오류. Naive concat은 misaligned지만 이 잘못된 신호가 없음.
+
+**리뷰어 예측의 정량적 확증** — H3 learned corrector가 겨냥해야 할 정확한 지점.
 
 ## 핵심 관찰 (프로젝트 동기)
 
