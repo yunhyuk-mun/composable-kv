@@ -1,87 +1,91 @@
-"""Generate Figure: quality-cost Pareto plot for composition methods."""
+"""Generate Figure: horizontal bar chart of composition methods.
+
+Two-in-one figure:
+  - Left panel: held-out next-token KL per method (main quality metric).
+  - Right panel: composition wall-clock per method (cost metric).
+
+Same method ordering + colors on both panels, so the reader can eye up
+a method's quality-vs-cost trade-off directly.
+"""
 
 import matplotlib.pyplot as plt
 import matplotlib
-from matplotlib.lines import Line2D
+from matplotlib.patches import FancyBboxPatch
 
 matplotlib.rcParams.update({
     "font.size": 11,
     "font.family": "serif",
     "axes.labelsize": 12,
-    "legend.fontsize": 9.5,
+    "legend.fontsize": 10,
     "xtick.labelsize": 10,
-    "ytick.labelsize": 10,
+    "ytick.labelsize": 11,
 })
 
-# (label, wall_ms, KL, marker, color, xytext_offset in points)
+# Order: best KL at the top of the bar chart
 methods = [
-    ("M1",  3.1,   0.329, "o",  "#4d4d4d", (-28,  10)),   # gray
-    ("M4",  3.5,   0.308, "D",  "#1b9e77", ( 12, -12)),   # green
-    ("M2",  14.1,  0.405, "s",  "#d62728", ( 12,  10)),   # red
-    ("M3",  14.0,  0.404, "v",  "#ff7f0e", ( 12, -14)),   # orange, triangle-down
-    ("M5",  13.4,  0.367, "P",  "#7570b3", (-30, -14)),   # purple
+    ("M4  M1 + H3 corrector",       0.308, 3.5,  "#1b9e77"),  # green
+    ("M1  naive concat",            0.329, 3.1,  "#4d4d4d"),  # gray
+    ("M5  M2 + H3 corrector",       0.367, 13.4, "#7570b3"),  # purple
+    ("M3  RoPE-shift ex mid",       0.404, 14.0, "#ff7f0e"),  # orange
+    ("M2  RoPE-shifted concat",     0.405, 14.1, "#d62728"),  # red
 ]
-oracle_x, oracle_y = 344.9, 0.0
 
-fig, ax = plt.subplots(figsize=(8.5, 5.0))
+labels     = [m[0] for m in methods]
+kl_values  = [m[1] for m in methods]
+ms_values  = [m[2] for m in methods]
+colors     = [m[3] for m in methods]
+prefill_ms = 344.9
 
-# Oracle reference line
-ax.axhline(0.0, color="grey", linestyle=":", linewidth=1.0, alpha=0.7)
+fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.0, 4.6),
+                                gridspec_kw={"width_ratios": [1.6, 1.0]})
 
-# Improvement arrows first (behind markers)
-ax.annotate("", xy=(3.5, 0.308), xytext=(3.1, 0.329),
-            arrowprops=dict(arrowstyle="->", color="#1b9e77", lw=2.5, alpha=0.9,
-                            shrinkA=8, shrinkB=8))
-ax.annotate("", xy=(13.4, 0.367), xytext=(14.1, 0.405),
-            arrowprops=dict(arrowstyle="->", color="#7570b3", lw=2.5, alpha=0.9,
-                            shrinkA=8, shrinkB=8))
+# --- LEFT: held-out KL ---
+bars = axL.barh(labels, kl_values, color=colors, edgecolor="black", linewidth=0.9)
+for bar, v in zip(bars, kl_values):
+    axL.text(v + 0.006, bar.get_y() + bar.get_height() / 2,
+             f"{v:.3f}", va="center", fontsize=10)
 
-# Method markers
-for label, ms, kl, marker, color, (dx, dy) in methods:
-    ax.scatter(ms, kl, s=260, marker=marker, color=color, edgecolor="black",
-               linewidth=1.3, zorder=4)
-    ax.annotate(label, xy=(ms, kl), xytext=(dx, dy), textcoords="offset points",
-                fontsize=13, fontweight="bold", color=color,
-                ha="center", va="center", zorder=5)
+axL.set_xlim(0, max(kl_values) * 1.18)
+axL.axvline(0, color="black", linewidth=0.7)
+axL.set_xlabel("Held-out next-token KL vs full-prefill oracle  (lower is better)")
+axL.set_title("Quality  (Table 2 aggregate)", pad=10)
+axL.invert_yaxis()  # best on top
+axL.grid(True, axis="x", alpha=0.3)
+axL.spines["top"].set_visible(False)
+axL.spines["right"].set_visible(False)
 
-# Oracle star
-ax.scatter(oracle_x, oracle_y, s=340, marker="*", color="white",
-           edgecolor="black", linewidth=1.3, zorder=4)
-ax.annotate("full prefill\n(KL = 0 by def.)", xy=(oracle_x, oracle_y),
-            xytext=(-6, 35), textcoords="offset points",
-            fontsize=10, color="#333333", ha="center",
-            arrowprops=dict(arrowstyle="->", color="#555555", lw=0.9, alpha=0.7))
+# Baseline references indicated by dashed lines instead of arrows
+# (M1 baseline dashed grey; M2 baseline dashed red) so the bar length
+# difference below each baseline reads as the H3 improvement.
+axL.axvline(0.329, color="#4d4d4d", linestyle="--", linewidth=0.9, alpha=0.55)
+axL.text(0.329, -0.55, "M1 baseline", color="#4d4d4d", fontsize=8.5,
+         ha="center", va="center")
+axL.axvline(0.405, color="#d62728", linestyle="--", linewidth=0.9, alpha=0.55)
+axL.text(0.405, -0.55, "M2 baseline", color="#d62728", fontsize=8.5,
+         ha="center", va="center")
 
-# Improvement direction is communicated by the arrows and by the legend + caption.
+# --- RIGHT: cost bar chart ---
+bars_r = axR.barh(labels, ms_values, color=colors, edgecolor="black", linewidth=0.9)
+for bar, v in zip(bars_r, ms_values):
+    axR.text(v + 0.4, bar.get_y() + bar.get_height() / 2,
+             f"{v:.1f} ms", va="center", fontsize=10)
 
-# Legend — two columns, plenty of horizontal room
-legend_handles = [
-    Line2D([0], [0], marker="o", color="w", markerfacecolor="#4d4d4d",
-           markeredgecolor="black", markersize=12, label="M1  naive concat"),
-    Line2D([0], [0], marker="s", color="w", markerfacecolor="#d62728",
-           markeredgecolor="black", markersize=12, label="M2  RoPE-shifted concat"),
-    Line2D([0], [0], marker="v", color="w", markerfacecolor="#ff7f0e",
-           markeredgecolor="black", markersize=12, label="M3  RoPE-shift, mid layers unshifted"),
-    Line2D([0], [0], marker="D", color="w", markerfacecolor="#1b9e77",
-           markeredgecolor="black", markersize=12, label="M4  M1 + H3 corrector"),
-    Line2D([0], [0], marker="P", color="w", markerfacecolor="#7570b3",
-           markeredgecolor="black", markersize=12, label="M5  M2 + H3 corrector"),
-    Line2D([0], [0], marker="*", color="w", markerfacecolor="white",
-           markeredgecolor="black", markersize=14, label="full prefill (oracle)"),
-]
-ax.legend(handles=legend_handles, loc="upper center",
-          bbox_to_anchor=(0.5, -0.16), ncol=2,
-          frameon=True, fancybox=False, edgecolor="black")
+axR.axvline(prefill_ms, color="#555555", linestyle="--", linewidth=1.2, alpha=0.8)
+axR.text(prefill_ms, -0.7, f"full prefill\n{prefill_ms:.0f} ms",
+         fontsize=9, ha="center", color="#333333")
 
-ax.set_xlabel("Composition wall-clock (ms, CPU, |B|=19)")
-ax.set_ylabel("Held-out next-token KL (lower is better)")
-ax.set_title("Quality-cost trade-off across composition methods", pad=12)
-ax.set_xscale("log")
-ax.set_xlim(1.8, 800)
-ax.set_ylim(-0.06, 0.50)
-ax.grid(True, alpha=0.3, which="both")
+axR.set_xlim(0, prefill_ms * 1.15)
+axR.set_xlabel("Composition wall-clock  (ms, CPU, |B|=19)")
+axR.set_title("Cost  (Table 3)", pad=10)
+axR.invert_yaxis()
+axR.set_yticklabels([])
+axR.grid(True, axis="x", alpha=0.3)
+axR.spines["top"].set_visible(False)
+axR.spines["right"].set_visible(False)
 
-plt.tight_layout(pad=1.5)
+plt.suptitle("Quality-cost trade-off across composition methods (Qwen-2.5-0.5B)",
+             y=1.03, fontsize=13)
+plt.tight_layout()
 plt.savefig("paper/pareto.pdf", format="pdf", bbox_inches="tight")
 plt.savefig("paper/pareto.png", format="png", dpi=200, bbox_inches="tight")
 print("Wrote paper/pareto.pdf and paper/pareto.png")
