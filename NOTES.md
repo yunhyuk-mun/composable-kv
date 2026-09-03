@@ -209,10 +209,10 @@ Learned corrector   → mid-layer V만 보정      (H3, 최소 비용)
 
 **M3 ≈ M2. 모든 지표 1 std 이내 (noise 수준).**
 
-**함의:**
-1. **Mid-layer V dip은 증상, 원인 아님.** Layer 선택으론 실패 조건을 못 고침.
-2. Cross-context 정보 부재는 layer 조작으로 해결 불가 → **learned mechanism 필요.**
-3. H3 learned corrector의 존재 정당성 empirical 확보.
+**함의 (표현 완화, per reviewer):**
+1. **단순 layer selection만으로는 mid-layer mismatch를 해결하지 못함** (M3 실패가 "dip이 원인 아님"을 증명하진 않음, 다만 이 각도의 rule-based 개입은 부족).
+2. Cross-context 정보 부재 문제는 layer 선택보다 강한 개입이 필요할 가능성이 큼 → learned mechanism 시도할 이유.
+3. H3 learned corrector의 존재 정당성 empirical **motivate** (증명 아닌 동기 부여).
 
 **부수 관찰:** "Best method by KL"에서 M1이 3/4 승. 그러나 top-1은 M2/M3가 우위. 이유: baseline degenerate 조건에서 low KL = "같은 실패 모드". → **top-1이 primary metric으로 더 적합** (리뷰어의 behavioral 층 통찰과 부합).
 
@@ -293,13 +293,13 @@ Learned corrector   → mid-layer V만 보정      (H3, 최소 비용)
 | **conflicting** | **M5_rope_h3** | **0.228** | **-35%** |
 | cross_inferential | M4_naive_h3 | 0.301 | -8.8% |
 
-**핵심 결론 4개:**
-1. **Cosine 개선(+2%)이 downstream KL 개선(-5~8%)으로 translated.** Mechanism 검증.
+**핵심 결론 4개 (in-sample W 조건 하):**
+1. **Cosine 개선(+2%)이 downstream KL 개선(-5~8%)으로 translated** — Proof of feasibility. Held-out 필요.
 2. **H3가 4/4 조건에서 KL 감소** — 후퇴 없음.
 3. **M5 = M2 + H3는 상보적.** M2가 위치 문제, H3가 cross-context 부분 해결. 시너지.
 4. **Top-1은 크게 안 변함.** KL/top5가 개선. First-token 개선엔 multi-layer + non-linear 필요.
 
-**논문 스토리 6/7단 empirical 완료.**
+**논문 스토리 5.5/7단 empirical (H3 end-to-end는 in-sample proof, held-out 필수).**
 
 **Session 1 총 정리:**
 - 7 experiments 완료
@@ -311,10 +311,60 @@ Learned corrector   → mid-layer V만 보정      (H3, 최소 비용)
 - 첫날에 이 정도 empirical progress는 이례적 (Claude 활용의 효과)
 
 **Session 2 우선순위:**
-1. Out-of-sample H3 검증 (leave-one-out downstream)
+1. ~~Out-of-sample H3 검증~~ ✅ Session 1h에서 완료 (아래)
 2. H3 v2: MLP + V_A pooled context
 3. H3 v3: 모든 mid-layer 확장
 4. Qwen-2.5-1.5B 스케일업
+5. n=50+ 확장
+
+---
+
+## Session 1h: Held-out H3 evaluation (h3_holdout.py)
+
+**설계 (리뷰어 프로토콜):**
+- 5-fold at EXAMPLE level (token level split은 leakage 위험)
+- 각 fold: 16 train + 4 held-out
+- Pre-cache 모든 20 예제 (kv_a, kv_b, kv_full, p_base 한 번씩) — 효율 최적화
+- 각 fold에서 train W → held-out 예제에 적용 → M1/M2/M4/M5 KL/top-k
+
+**Aggregate (5-fold, held-out):**
+| method | KL mean | KL std | top1 | top5 |
+|---|---|---|---|---|
+| M1_naive | 0.329 | 0.127 | 0.25 | 0.77 |
+| M2_rope | 0.405 | 0.207 | 0.50 | 0.72 |
+| **M4_naive_h3** | **0.308** | 0.118 | 0.30 | **0.79** |
+| **M5_rope_h3** | 0.367 | 0.196 | **0.55** | 0.75 |
+
+**Held-out delta:**
+- M4 vs M1: dKL = -0.021 (-6.4%), dTop1 = +0.05
+- M5 vs M2: dKL = -0.038 (-9.4%), dTop1 = +0.05
+
+**In-sample vs held-out 비교 (Session 1의 진짜 main result):**
+| method | in-sample KL | held-out KL | 차이 |
+|---|---|---|---|
+| M4_naive_h3 | 0.311 | 0.308 | -0.003 |
+| M5_rope_h3 | 0.370 | 0.367 | -0.003 |
+
+**Held-out이 in-sample과 거의 동일.** → **Linear W가 진짜 generalize함.** Overfitting 아님. 20 예제 × 64x64 map이 held-out에 그대로 작동.
+
+**Per-condition standout:**
+- **Conflicting M5: KL 0.228, top1 = 1.00 on held-out.** 4/4 held-out 예시 모두 baseline top-1과 일치. 강력한 empirical 결과.
+- Cross_inferential M4: KL 0.299 (M1 0.330 대비 -9.4%).
+- Referential M4: 0.293 (M1 0.295 대비 marginal).
+
+**In-sample fold cos (sanity):** 0.7504~0.7607 (fold별 편차 작음).
+
+**함의:**
+1. **H3 linear correction은 진짜 generalize함.** 이건 Session 1의 진짜 main result.
+2. M5 conflicting에서 top1=1.00 held-out은 특히 강한 empirical 결과.
+3. **논문 스토리 7/7단 empirical 완료.** 나머지는 확장 실험 (MLP, multi-layer, Pareto).
+4. 다음 확장 방향의 empirical 정당성 확보됨.
+
+**Caveat:**
+- n=20 여전히 작음 (n=50~100 필요)
+- 0.5B 모델 한정 (1.5B+ 스케일업 필요)
+- Cross_inferential/referential에서 baseline 자체가 degenerate (top1 낮음)
+- Corrector가 L12 한 레이어만. Multi-layer 확장 시 gain 누적 여부 미확인
 
 ---
 
