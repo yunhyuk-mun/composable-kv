@@ -238,7 +238,7 @@ None of these blockers is fatal to the direction; each is the subject of a concr
 
 We decomposed the error of independent-prefill KV composition into a position component and a cross-context representation component, and showed on a small controlled benchmark that a single $64\times64$ linear map on the mid-layer value cache reduces held-out downstream next-token KL by $6.4$--$9.4\%$ across all four condition types. The corrector generalizes from 16 training to 4 held-out examples per fold within $3\times10^{-3}$ KL, and adds approximately $0.34$ ms and $0.0021\%$ of the FLOPs of one $B$-prefill. Scaling the benchmark, reproducing on larger and more diverse models, and testing more expressive correctors are the natural next steps.
 
-\paragraph{Code and reproduction.} All code, data conditions, raw result logs, sanity checks, and cost measurements are released at \url{https://github.com/<repo-to-be-added>/composable-kv} under an MIT license.
+\paragraph{Code and reproduction.} All code, data conditions, raw result logs, sanity checks, and cost measurements are released at \url{https://github.com/yunhyuk-mun/composable-kv} under an MIT license.
 
 \bibliographystyle{plainnat}
 \bibliography{references}
