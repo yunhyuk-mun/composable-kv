@@ -17,6 +17,7 @@ import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
 
 MODEL_NAME = "Qwen/Qwen2.5-0.5B"
+ROPE_THETA = 1000000.0
 
 
 CONDITIONS = {
@@ -65,6 +66,32 @@ def naive_concat_kv(cache_a, cache_b):
         kb = cache_b.layers[layer_idx].keys
         vb = cache_b.layers[layer_idx].values
         k_cat = torch.cat([ka, kb], dim=-2)
+        v_cat = torch.cat([va, vb], dim=-2)
+        new_cache.update(k_cat, v_cat, layer_idx)
+    return new_cache
+
+
+def rope_shift(k, delta, rope_theta=ROPE_THETA):
+    D = k.shape[-1]
+    half = D // 2
+    i = torch.arange(half, dtype=torch.float32, device=k.device)
+    inv_freq = 1.0 / (rope_theta ** (2 * i / D))
+    angles = float(delta) * inv_freq
+    cos = torch.cos(angles).to(k.dtype).view(1, 1, 1, half)
+    sin = torch.sin(angles).to(k.dtype).view(1, 1, 1, half)
+    k1, k2 = k[..., :half], k[..., half:]
+    return torch.cat([k1 * cos - k2 * sin, k1 * sin + k2 * cos], dim=-1)
+
+
+def rope_shifted_concat_kv(cache_a, cache_b, len_a):
+    new_cache = DynamicCache()
+    for layer_idx in range(len(cache_a.layers)):
+        ka = cache_a.layers[layer_idx].keys
+        va = cache_a.layers[layer_idx].values
+        kb = cache_b.layers[layer_idx].keys
+        vb = cache_b.layers[layer_idx].values
+        kb_shifted = rope_shift(kb, delta=len_a)
+        k_cat = torch.cat([ka, kb_shifted], dim=-2)
         v_cat = torch.cat([va, vb], dim=-2)
         new_cache.update(k_cat, v_cat, layer_idx)
     return new_cache
@@ -124,41 +151,50 @@ def greedy_from_scratch(model, tokenizer, full_prompt, max_new=25):
     return tokenizer.decode(out[0, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 
 
+def evaluate_method(model, tokenizer, cond, method_name, compose_fn):
+    kv_a, len_a = prefill(model, tokenizer, cond["A"])
+    kv_b, len_b = prefill(model, tokenizer, cond["B"])
+    composed_len = len_a + len_b
+
+    full_prompt = cond["A"] + " " + cond["B"] + cond["query"]
+    p_base = next_token_dist_from_scratch(model, tokenizer, full_prompt)
+    ans_base = greedy_from_scratch(model, tokenizer, full_prompt)
+
+    kv_dist = compose_fn(kv_a, kv_b, len_a)
+    p_comp = next_token_dist_with_kv(model, tokenizer, cond["query"], kv_dist, composed_len)
+
+    kv_gen = compose_fn(kv_a, kv_b, len_a)
+    ans_comp = greedy_with_kv(model, tokenizer, kv_gen, composed_len, cond["query"])
+
+    return {
+        "method": method_name,
+        "kl": kl_divergence(p_base, p_comp),
+        "t1": top_k_agreement(p_base, p_comp, 1),
+        "t5": top_k_agreement(p_base, p_comp, 5),
+        "t10": top_k_agreement(p_base, p_comp, 10),
+        "base": ans_base,
+        "comp": ans_comp,
+    }
+
+
 def run_condition(model, tokenizer, name, cond):
     print(f"\n{'-' * 60}\nCONDITION: {name}\n{'-' * 60}")
     print(f"A: {cond['A']}")
     print(f"B: {cond['B']}")
     print(f"Q: {cond['query'].strip()}")
 
-    kv_a, len_a = prefill(model, tokenizer, cond["A"])
-    kv_b, len_b = prefill(model, tokenizer, cond["B"])
-    kv_composed = naive_concat_kv(kv_a, kv_b)
-    composed_len = len_a + len_b
-
-    full_prompt = cond["A"] + " " + cond["B"] + cond["query"]
-
-    p_base = next_token_dist_from_scratch(model, tokenizer, full_prompt)
-
-    kv_composed_for_dist = naive_concat_kv(kv_a, kv_b)
-    p_comp = next_token_dist_with_kv(model, tokenizer, cond["query"], kv_composed_for_dist, composed_len)
-
-    kl = kl_divergence(p_base, p_comp)
-    top1 = top_k_agreement(p_base, p_comp, 1)
-    top5 = top_k_agreement(p_base, p_comp, 5)
-    top10 = top_k_agreement(p_base, p_comp, 10)
-
-    ans_base = greedy_from_scratch(model, tokenizer, full_prompt)
-
-    kv_composed_for_gen = naive_concat_kv(kv_a, kv_b)
-    ans_comp = greedy_with_kv(model, tokenizer, kv_composed_for_gen, composed_len, cond["query"])
-
-    print(f"  KL(base||comp):  {kl:.4f}")
-    print(f"  Top-1 / 5 / 10:  {top1:.2f} / {top5:.2f} / {top10:.2f}")
-    print(f"  Baseline answer: {ans_base!r}")
-    print(f"  Composed answer: {ans_comp!r}")
-
-    return {"cond": name, "kl": kl, "t1": top1, "t5": top5, "t10": top10,
-            "base": ans_base, "comp": ans_comp}
+    methods = {
+        "M1_naive":   lambda a, b, la: naive_concat_kv(a, b),
+        "M2_rope":    lambda a, b, la: rope_shifted_concat_kv(a, b, la),
+    }
+    method_results = []
+    for name_m, fn in methods.items():
+        r = evaluate_method(model, tokenizer, cond, name_m, fn)
+        method_results.append(r)
+        print(f"  [{name_m}] KL={r['kl']:.4f}  top1/5/10={r['t1']:.2f}/{r['t5']:.2f}/{r['t10']:.2f}")
+        print(f"    answer: {r['comp']!r}")
+    print(f"  [BASELINE] answer: {method_results[0]['base']!r}")
+    return {"cond": name, "methods": method_results}
 
 
 def main():
@@ -167,10 +203,17 @@ def main():
 
     results = [run_condition(model, tokenizer, n, c) for n, c in CONDITIONS.items()]
 
-    print(f"\n{'=' * 60}\nSUMMARY -- naive concat vs full-prefill baseline\n{'=' * 60}")
-    print(f"{'condition':<20}{'KL':>10}{'top1':>8}{'top5':>8}{'top10':>8}")
+    print(f"\n{'=' * 60}\nSUMMARY -- M1 (naive concat) vs M2 (RoPE-shifted concat)\n{'=' * 60}")
+    print(f"{'condition':<20}{'method':<12}{'KL':>10}{'top1':>8}{'top5':>8}{'top10':>8}")
     for r in results:
-        print(f"{r['cond']:<20}{r['kl']:>10.3f}{r['t1']:>8.2f}{r['t5']:>8.2f}{r['t10']:>8.2f}")
+        for m in r["methods"]:
+            print(f"{r['cond']:<20}{m['method']:<12}{m['kl']:>10.3f}{m['t1']:>8.2f}{m['t5']:>8.2f}{m['t10']:>8.2f}")
+
+    print(f"\n{'=' * 60}\nDELTA (M2 - M1)\n{'=' * 60}")
+    print(f"{'condition':<20}{'dKL':>10}{'dTop1':>8}{'dTop5':>8}{'dTop10':>8}")
+    for r in results:
+        m1, m2 = r["methods"][0], r["methods"][1]
+        print(f"{r['cond']:<20}{m2['kl']-m1['kl']:>10.3f}{m2['t1']-m1['t1']:>8.2f}{m2['t5']-m1['t5']:>8.2f}{m2['t10']-m1['t10']:>8.2f}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,77 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading Qwen/Qwen2.5-0.5B ...
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  28%|##7       | 81/290 [00:00<00:00, 785.79it/s]Loading weights:  55%|#####5    | 160/290 [00:00<00:00, 641.48it/s]Loading weights:  78%|#######7  | 226/290 [00:00<00:00, 626.19it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 609.90it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 628.21it/s]
+
+------------------------------------------------------------
+CONDITION: independent
+------------------------------------------------------------
+A: Alice is a doctor. She lives in Seoul and works at Samsung Medical Center.
+B: The capital of France is Paris. It has a population of about 2.1 million.
+Q: Question: What does Alice do?
+Answer:
+  [M1_naive] KL=0.3244  top1/5/10=0.00/0.80/0.60
+    answer: ' She is a doctor.\nQuestion: What does Alice do?\nAnswer: She is a doctor.\nQuestion: What does Alice do'
+  [M2_rope] KL=0.2712  top1/5/10=1.00/0.80/0.90
+    answer: ' Alice is a doctor. She lives in Seoul and works at Samsung Medical Center.'
+  [BASELINE] answer: ' Alice works at Samsung Medical Center.'
+
+------------------------------------------------------------
+CONDITION: referential
+------------------------------------------------------------
+A: Alice is a doctor. She lives in Seoul and works at Samsung Medical Center.
+B: She recently published a paper on cardiac surgery in the New England Journal.
+Q: Question: Who published a paper on cardiac surgery?
+Answer:
+  [M1_naive] KL=0.3358  top1/5/10=0.00/0.60/0.70
+    answer: ' The answer is Alice.'
+  [M2_rope] KL=0.5239  top1/5/10=0.00/0.60/0.60
+    answer: ' The answer to this question is: Alice'
+  [BASELINE] answer: ''
+
+------------------------------------------------------------
+CONDITION: conflicting
+------------------------------------------------------------
+A: Alice is a doctor working at Samsung Medical Center in Seoul.
+B: Alice is a software engineer at Naver in Bundang.
+Q: Question: What does Alice do?
+Answer:
+  [M1_naive] KL=0.2775  top1/5/10=0.00/0.60/0.70
+    answer: ' She is a software engineer at Samsung Medical Center in Seoul.\n\nAlice is a software engineer at Samsung Medical Center in Seoul. The'
+  [M2_rope] KL=0.2120  top1/5/10=1.00/0.60/0.90
+    answer: ' Alice is a software engineer at Samsung Medical Center in Seoul.'
+  [BASELINE] answer: ' Alice is a software engineer at Naver in Bundang.'
+
+------------------------------------------------------------
+CONDITION: cross_inferential
+------------------------------------------------------------
+A: All doctors at Samsung Medical Center must complete residency within 5 years.
+B: Alice is a doctor at Samsung Medical Center who started her residency in 2020.
+Q: Question: By what year at the latest must Alice complete her residency?
+Answer:
+  [M1_naive] KL=0.4099  top1/5/10=0.00/0.80/0.80
+    answer: ' 2025'
+  [M2_rope] KL=0.4509  top1/5/10=0.00/0.80/0.80
+    answer: ' 2025'
+  [BASELINE] answer: ' By 2024.'
+
+============================================================
+SUMMARY -- M1 (naive concat) vs M2 (RoPE-shifted concat)
+============================================================
+condition           method              KL    top1    top5   top10
+independent         M1_naive         0.324    0.00    0.80    0.60
+independent         M2_rope          0.271    1.00    0.80    0.90
+referential         M1_naive         0.336    0.00    0.60    0.70
+referential         M2_rope          0.524    0.00    0.60    0.60
+conflicting         M1_naive         0.278    0.00    0.60    0.70
+conflicting         M2_rope          0.212    1.00    0.60    0.90
+cross_inferential   M1_naive         0.410    0.00    0.80    0.80
+cross_inferential   M2_rope          0.451    0.00    0.80    0.80
+
+============================================================
+DELTA (M2 - M1)
+============================================================
+condition                  dKL   dTop1   dTop5  dTop10
+independent             -0.053    1.00    0.00    0.30
+referential              0.188    0.00    0.00   -0.10
+conflicting             -0.066    1.00    0.00    0.20
+cross_inferential        0.041    0.00    0.00    0.00

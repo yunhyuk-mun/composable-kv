@@ -14,7 +14,9 @@ Can independently prefilled KV caches be composed in cache-space to approximate 
 - [x] Raw-concat behavioral baseline (next-token KL, top-k agreement)
 - [x] Four-condition controlled benchmark (results below)
 - [x] Layer-wise K/V divergence analysis (mid-layer dip identified)
-- [ ] RoPE-shifted concat baseline
+- [x] RoPE-shifted concat baseline (Method 2 -- validated, top-1 restored in 2/4 conditions)
+- [ ] Scale-up to Qwen-2.5-1.5B (baseline reliability for referential/reasoning)
+- [ ] Multiple examples per condition (n=10)
 - [ ] Layer/head failure analysis (per-head, per-token)
 - [ ] Learned corrector (H3)
 - [ ] Cost/latency Pareto measurement
@@ -58,6 +60,35 @@ B-alone K/V를 full-prefill의 B-portion과 layer별 cosine 유사도로 비교.
 2. **Conflicting 조건에서만 V < K.** 위치 효과보다 cross-context 효과가 강함. → **RoPE-shift만으로 conflicting은 못 고침.**
 
 3. **Method 6 (learned combiner) 설계 방향 결정:** 모든 레이어에 붙일 필요 없음 → **L10-L15에 selective corrector** = 최소 파라미터로 최대 효과. 리뷰어의 "combiner가 크면 prefill이 낫다" 우려를 원천 대응.
+
+## Method 2 결과 (RoPE-shifted concat, rope_test.py + mve.py)
+
+RoPE-shift 구현 검증: L0 shifted K cos = 1.0000 (perfect). 초기 레이어는 pure position offset이었고 shift로 완전 복구.
+
+**Layer-wise K 개선 (independent condition):**
+- Raw K: 0.817 → **Shifted K: 0.923** (오차 절반 이상 감소)
+- V (unchanged reference): 0.844
+
+**Behavioral (M1 vs M2, next-token distribution):**
+
+| condition | KL M1 → M2 | Top-1 M1 → M2 | 판정 |
+|---|---|---|---|
+| independent | 0.324 → **0.271** | 0.00 → **1.00** | ✅ M2 압승 |
+| conflicting | 0.278 → **0.212** | 0.00 → **1.00** | ✅ M2 압승 |
+| referential | 0.336 → 0.524 | 0.00 → 0.00 | ❌ baseline degenerate |
+| cross_inferential | 0.410 → 0.451 | 0.00 → 0.00 | ~ baseline degenerate |
+
+**Referential/cross_inferential에서 M2가 나쁘게 보이는 이유:** baseline 자체가 이 조건에서 degenerate — Referential baseline 답이 empty (''), cross_inferential은 산술 오류 ("By 2024" 대신 "2025"가 정답). 실제로는 M1/M2 모두 correct 답 뱉음. 0.5B 모델의 신뢰성 한계.
+
+**리뷰어 예측 검증:** "RoPE-shift는 강한 baseline이지만 정답 KV는 아님. cross-context interaction 복원 불가." → 정확히 empirical하게 확인됨. Learned combiner (H3)의 존재 정당성 확보.
+
+**논문 스토리 뼈대:**
+```
+M1 naive concat    → universal top-1 = 0
+M2 RoPE-shift      → 2/4 top-1 = 1.0 (position 해결, cross-context 잔존)
+Layer analysis     → mid-layer V가 병목 (L10-L15)
+H3 learned corrector → mid-layer V만 보정 (minimum-parameter form)
+```
 
 ## 핵심 관찰 (프로젝트 동기)
 

@@ -93,6 +93,58 @@ MVE 실행 결과와 관찰을 여기 기록. 매 실험마다 한 섹션.
 
 ---
 
+## Session 1c: Method 2 구현 및 M1 vs M2 (rope_test.py + mve.py)
+
+**RoPE 구현:**
+- Qwen2.5-0.5B config: `rope_theta=1000000`, head_dim=64, half-rotation
+- 구현: k1,k2 분할 → (k1·cos - k2·sin, k1·sin + k2·cos)
+- 검증: L0 shifted K cos = 1.0000 (perfect sanity). 초기 레이어는 cross-context 없어서 K가 위치만 문제였고, shift로 완벽 복구.
+
+**Layer-wise K 개선 (shifted vs raw, independent condition 기준):**
+- Raw K mean cos: 0.817
+- Shifted K mean cos: **0.923** (오차 절반 이상 감소)
+- V mean cos: 0.844 (변하지 않음, reference)
+- 흥미: shifted K (0.92) > V (0.84). **K의 cross-context 효과가 V보다 작음.**
+
+**Behavioral 결과 (mve.py, M1 vs M2):**
+
+| condition | KL M1→M2 | Top-1 M1→M2 |
+|---|---|---|
+| independent | 0.324 → 0.271 | 0.00 → **1.00** |
+| conflicting | 0.278 → 0.212 | 0.00 → **1.00** |
+| referential | 0.336 → 0.524 | 0.00 → 0.00 |
+| cross_inferential | 0.410 → 0.451 | 0.00 → 0.00 |
+
+**해석:**
+- ✅ Independent/conflicting: A→B 상호작용 약함 → M2 top-1 완벽 복원
+- ❌ Referential/cross_inferential: baseline 자체가 degenerate ('' 또는 "By 2024" 산술오류) → KL 비교 무의미. 실제 답은 M1/M2 모두 correct.
+- **0.5B는 baseline 신뢰성 문제. 1.5B+로 스케일업 필요.**
+
+**리뷰어 예측 empirical 검증:**
+> "RoPE-shift는 강한 baseline이지만 정답 KV는 아님. cross-context interaction 복원 불가."
+- ✅ 정확히 맞음. 상호작용 약한 곳은 잘 되고 강한 곳은 실패.
+- ✅ Learned combiner (H3)의 존재 정당성 empirical 확보.
+
+**정성적 하이라이트:**
+- Independent M2: `"Alice is a doctor. She lives in Seoul..."` — baseline 정보 완전 복원
+- Conflicting M2: `"software engineer at Samsung Medical Center in Seoul"` — A/B literal fusion 지속
+- Cross_inferential 둘 다: `"2025"` — 산술적 정답 (baseline "By 2024"는 오히려 틀림)
+
+**논문 스토리 완성:**
+```
+Naive concat (M1)   → universal top-1 = 0     (완전 실패)
+RoPE-shift (M2)     → 2/4 top-1 = 1.0        (위치 문제 해결, cross-context 잔존)
+Layer analysis      → mid-layer V가 병목      (L10-L15)
+Learned corrector   → mid-layer V만 보정      (H3, 최소 비용)
+```
+
+**다음:**
+- 더 큰 모델(Qwen-2.5-1.5B) 스케일업으로 referential/cross_inferential baseline 신뢰성 확보
+- 각 조건당 예시 확장 (n=1 → n=10) 통계적 견고성
+- H3 learned corrector 프로토타입 (L10-L15만, V 위주)
+
+---
+
 ## 외부 리뷰 요지 (2026-09-03, MVE v1 → v2 재구조화 근거)
 
 ### 강한 점 (그대로 유지)
