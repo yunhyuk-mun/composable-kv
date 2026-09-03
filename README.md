@@ -103,6 +103,10 @@ composable-kv/
 ├── rope_test.py           # RoPE-shift verification
 ├── cost_analysis.py       # Wall-clock + FLOP estimates
 ├── sanity_check.py        # Pipeline correctness checks
+├── paper/                 # LaTeX paper draft (workshop / arXiv scale)
+│   ├── paper.tex
+│   ├── references.bib
+│   └── README.md          # How to build (Overleaf or local pdflatex)
 └── results/               # Raw output logs from all runs
 ```
 
