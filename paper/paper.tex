@@ -211,8 +211,8 @@ M5 RoPE-shift + H3 correction   &  13.4 &   3.90 \\
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.75\textwidth]{pareto.pdf}
-\caption{Quality--cost trade-off across composition methods. Held-out next-token KL (Table~\ref{tab:holdout} aggregate) versus composition wall-clock (Table~\ref{tab:cost}) on Qwen-2.5-0.5B, CPU, $|B|=19$. Green arrow: M1 $\to$ M4 (naive + H3). Purple arrow: M2 $\to$ M5 (RoPE + H3). At either cost point, adding H3 moves the operating point downward at approximately fixed compute (composition-only view; setup assumes $\mathrm{KV}_A, \mathrm{KV}_B$ already computed and in memory).}
+\includegraphics[width=\textwidth]{pareto.pdf}
+\caption{Quality--cost trade-off across composition methods. Left: held-out next-token KL (Table~\ref{tab:holdout} aggregate), sorted with the best on top; dashed lines mark the M1 (grey) and M2 (red) baselines so the H3-augmented rows read directly as leftward improvements. Right: composition wall-clock in the same method order (Table~\ref{tab:cost}), with a dashed reference at the full-prefill cost (345~ms). Setup: Qwen-2.5-0.5B, CPU, $|B|=19$, $\mathrm{KV}_A, \mathrm{KV}_B$ already computed and in memory.}
 \label{fig:pareto}
 \end{figure}
 
