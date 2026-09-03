@@ -31,7 +31,7 @@ An early-stage empirical study on Qwen-2.5-0.5B. Portfolio / research-in-progres
 | **M4_naive_h3** | **0.311** | 0.30 | **0.79** |
 | **M5_rope_h3** | 0.370 | 0.50 | 0.76 |
 
-**Main result (held-out, 5-fold example-level split):** A 64×64 linear map on layer-12 V, trained on 16 examples per fold, reduces downstream KL on the 4 held-out examples by 6.4% (M4 vs M1) and 9.4% (M5 vs M2), consistently across all four conditions. Held-out KL matches in-sample KL within 0.003, indicating the corrector generalizes at this sample size rather than memorizing.
+**Main result (held-out, 5-fold example-level split):** A 64×64 linear map on layer-12 V, trained on 16 examples per fold, reduces downstream KL on the 4 held-out examples by 6.4% (M4 vs M1) and 9.4% (M5 vs M2), and reduces KL on all four conditions in this 20-example controlled benchmark. Held-out KL matches in-sample KL within 0.003, indicating the corrector generalizes at this sample size rather than memorizing.
 
 **How to read RoPE-shift (M2):**
 - By top-1 agreement, M2 improves on M1 in every condition except referential (a tie).
@@ -50,7 +50,7 @@ An early-stage empirical study on Qwen-2.5-0.5B. Portfolio / research-in-progres
 ## Reproduction
 
 ```bash
-git clone <this repo>
+git clone https://github.com/yunhyuk-mun/composable-kv.git
 cd composable-kv
 
 python -m venv .venv
@@ -74,7 +74,7 @@ python h3_poc.py
 # H3 end-to-end: M4, M5 with in-sample W
 python mve_h3.py
 
-# H3 held-out: 5-fold, example-level split (leakage-free)
+# H3 held-out: 5-fold, example-level split
 python h3_holdout.py
 
 # Pipeline correctness checks
