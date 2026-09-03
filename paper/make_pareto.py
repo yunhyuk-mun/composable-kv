@@ -26,7 +26,7 @@ methods = [
 ]
 prefill_baseline = ("full prefill", 344.9, 0.0)
 
-fig, ax = plt.subplots(figsize=(6.0, 4.0))
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
 
 for label, ms, kl, marker, color in methods:
     ax.scatter(ms, kl, s=110, marker=marker, color=color, edgecolor="black",
@@ -45,14 +45,14 @@ ax.annotate("", xy=(13.4, 0.367), xytext=(14.1, 0.405),
 
 ax.set_xlabel("Composition wall-clock (ms, CPU, |B|=19)")
 ax.set_ylabel("Held-out next-token KL (lower is better)")
-ax.set_title("Quality-cost trade-off across composition methods")
+ax.set_title("Quality-cost trade-off across composition methods", pad=12)
 ax.set_xscale("log")
 ax.set_xlim(2, 400)
 ax.set_ylim(-0.03, 0.5)
 ax.grid(True, alpha=0.3, which="both")
 ax.legend(loc="upper right", frameon=True, fancybox=False, edgecolor="black")
 
-plt.tight_layout()
+plt.tight_layout(pad=1.2)
 plt.savefig("paper/pareto.pdf", format="pdf", bbox_inches="tight")
 plt.savefig("paper/pareto.png", format="png", dpi=200, bbox_inches="tight")
 print("Wrote paper/pareto.pdf and paper/pareto.png")
