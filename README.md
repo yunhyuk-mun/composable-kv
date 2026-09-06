@@ -1,51 +1,47 @@
 # Composable KV
 
-**A lightweight linear value-cache correction trained on held-out examples reduces next-token KL relative to the full-prefill oracle on a small controlled benchmark. The improvement is consistent across four context-relation conditions, but has not yet been validated at scale, across model families, or under realistic serving workloads.**
+**An empirical study of independent LLM prefill KV cache composition on Qwen-2.5-0.5B.** We separate composition error into (i) position mismatch and (ii) cross-context representation mismatch, and evaluate five composition methods on a 20-example controlled benchmark with tokenization-aligned scoring. Preliminary results; single small model, single family, small hand-crafted benchmark.
 
-An early-stage empirical study on Qwen-2.5-0.5B. Portfolio / research-in-progress; not yet a paper. Session 1 log lives in [NOTES.md](NOTES.md).
+Session logs in [NOTES.md](NOTES.md). Paper draft in [paper/](paper/).
 
 ## Research Question
 
-> Independent prefill cache composition errors can be decomposed into (i) position mismatch and (ii) cross-context representation mismatch. Position is fixable by RoPE-shift. Can (ii) be partially closed by a low-cost learned correction on mid-layer V?
+> Independent prefill cache composition errors can be separated into (i) a position mismatch that RoPE-shift can fix and (ii) a cross-context representation mismatch that no positional operation on isolated caches can recover. On a small controlled benchmark, how much of the remaining gap does a lightweight linear correction on mid-layer values close?
 
 ## Method Landscape
 
 | Method | Composition | Correction |
 |---|---|---|
 | M1 naive | K,V from `KV_B` concatenated as-is | none |
-| M2 rope | K in `KV_B` rotated by `+|A|` positions before concat | none |
-| M3 layer-selective | RoPE-shift except mid-layers (L10-L15) | none |
+| M2 rope | K in `KV_B` rotated by `+\|A\|` positions before concat | none |
+| M3 layer-selective | RoPE-shift on all layers except mid `{L10..L15}` | none |
 | M4 naive + H3 | M1 | `W @ V` at L12 |
 | M5 rope + H3 | M2 | `W @ V` at L12 |
 
 `W ∈ R^{64×64}` is trained by ridge-regularized least squares to map `V_composed_B → V_full_B` at layer 12.
 
-## Key Results (Qwen-2.5-0.5B, n=5 examples per condition, in-sample W)
+## Key Results (Qwen-2.5-0.5B, tokenization-aligned)
 
-**Aggregate downstream next-token distribution vs full-prefill baseline:**
+**Aggregate downstream next-token KL vs full-prefill baseline (all five methods, n=20 examples):**
 
-| method | KL mean | top1 | top5 |
+| method | KL mean | top-1 | top-5 |
 |---|---|---|---|
-| M1_naive | 0.329 | 0.25 | 0.77 |
-| M2_rope | 0.405 | 0.50 | 0.72 |
-| **M4_naive_h3** | **0.311** | 0.30 | **0.79** |
-| **M5_rope_h3** | 0.370 | 0.50 | 0.76 |
+| M1_naive | 0.580 | 0.45 | 0.70 |
+| M2_rope | 0.577 | 0.55 | 0.70 |
+| **M3_layer_selective** | **0.522** | 0.55 | 0.72 |
+| M4_naive_h3 | 0.571 | 0.40 | 0.71 |
+| M5_rope_h3 | 0.553 | 0.55 | **0.73** |
 
-**Main result (held-out, 5-fold example-level split):** A 64×64 linear map on layer-12 V, trained on 16 examples per fold, reduces downstream KL on the 4 held-out examples by 6.4% (M4 vs M1) and 9.4% (M5 vs M2), and reduces KL on all four conditions in this 20-example controlled benchmark. Held-out KL matches in-sample KL within 0.003, indicating the corrector generalizes at this sample size rather than memorizing.
+**Main results:**
 
-**How to read RoPE-shift (M2):**
-- By top-1 agreement, M2 improves on M1 in every condition except referential (a tie).
-- By KL, M2 improves on M1 only in **conflicting** (0.353 → 0.270); on independent, referential, and cross-inferential, KL actually **worsens** despite top-1 gains.
-- These two behavioral metrics can move in opposite directions — hitting the right argmax while shifting probability mass elsewhere.
-- Reading this as "RoPE-shift is conditional" (wins on some conditions, loses on others) is only true if you commit to a single metric. Reporting KL and top-1 side by side is more honest.
+- **M3 (layer-selective RoPE-shift) is the strongest single method** in aggregate on this benchmark (0.522 KL), improving over full RoPE-shift by ~9.5% and over every other method. It improves KL on all four conditions. The mid-layer range `{L10..L15}` was chosen exploratorily from the value cosine dip observed on the full 20-example set (Section 5.1 of the paper), so M3 is not fully held-out at the layer-selection level; a fold-wise re-derivation is deferred to future work.
+- **H3 (linear value corrector) adds a small further improvement.** Held-out 5-fold, example-level: M4 reduces aggregate KL by 1.7% over M1; M5 by 3.8% over M2. On the *conflicting* condition, M5 achieves held-out top-1 agreement 1.00.
+- **Correction is not low-rank.** SVD of the trained W shows a nearly full-rank spectrum (63/64 singular values above 1% of the largest); rank truncations below k ≈ 22 underperform the un-corrected baseline. Naive rank compression of the corrector is not viable.
+- **Cost of composition is small.** M1/M2 composition is under 5% of one `prefill(B)` wall-clock; the H3 correction adds ~0.34 ms and ~0.0021% of one `prefill(B)`'s FLOPs.
 
-**M3 (layer-selective RoPE-shift):** Skipping RoPE-shift on mid layers alone did not improve over full M2. Layer selection alone is not sufficient to address the mid-layer V mismatch — this does not disprove the mid-layer dip as a cause, only that this particular intervention doesn't help.
+**Honest caveat on prior version.** An earlier version of this repo scored the baseline via `tokenize(A + " " + B + Q)` while the composition path used `tokenize(A) ‖ tokenize(B) ‖ tokenize(Q)`; this drift affected 20/20 examples by 1–2 boundary tokens. Aggregate H3 gains shrank from -6.4%/-9.4% (drift-affected) to -1.7%/-3.8% (aligned) once we enforced identical token ids on both paths, and M3 flipped from "no improvement over M2" to "best method." All numbers reported above and in the paper are the aligned ones.
 
-**Standout note:** On the conflicting condition alone, M5 (RoPE + H3) reaches held-out KL 0.228 and top-1 = 1.00 (every held-out example's composed distribution picks the same top token as full prefill). This is the strongest individual condition result, but the honest headline is the aggregate held-out reduction across all four conditions.
-
-**Cost (CPU, Qwen-2.5-0.5B):** Composition itself (M1/M2) is under 5% of one `prefill(B)` wall-clock. The H3 correction adds ~0.34 ms and ~311k FLOPs on top of naive concat — approximately **0.0021%** of a full `prefill(B)` forward. The "cheap corrector" claim is now backed by numbers rather than assertion.
-
-**Pipeline sanity:** Cache-injection round-trip introduces ~3×10⁻⁷ KL noise (identical-token-id `prefill(prefix)` + query vs `prefill(prefix + query)`). The observed method deltas (0.02–0.04 KL absolute) are ~10⁵× larger than this noise floor, so downstream KL differences reflect real composition behavior, not injection artifacts. See [sanity_check.py](sanity_check.py).
+**Pipeline sanity.** Cache-injection round-trip introduces ~3×10⁻⁷ KL noise on identical token ids. The observed method deltas (10⁻² absolute KL) are ~10⁵× larger than this noise floor. See [sanity_check.py](sanity_check.py).
 
 ## Reproduction
 
@@ -59,97 +55,102 @@ python -m venv .venv
 
 pip install -r requirements.txt
 
-# Downstream (M1, M2, M3) on 20 controlled examples
+# Table 1 aggregate (M1, M2, M3) on 20 controlled examples
 python mve.py
 
-# Layer-wise K/V divergence analysis
-python analyze_layers.py
-
-# RoPE-shift sanity check on one example
-python rope_test.py
-
-# H3 proof-of-concept: 5-fold CV on L12 V linear corrector
-python h3_poc.py
-
-# H3 end-to-end: M4, M5 with in-sample W
+# H3 end-to-end on all 20 examples (M4, M5)
 python mve_h3.py
 
-# H3 held-out: 5-fold, example-level split
+# H3 5-fold example-level held-out
 python h3_holdout.py
 
-# Pipeline correctness checks
-python sanity_check.py
+# Layer-wise K/V divergence (Section 5.1)
+python analyze_layers.py
 
-# Wall-clock + FLOP cost of composition and correction
+# W SVD interpretability (Section 5.5 + Figure 2)
+python h3_analysis.py
+
+# Cost measurement
 python cost_analysis.py
+
+# Pipeline sanity checks
+python sanity_check.py
 ```
 
-First run downloads `Qwen/Qwen2.5-0.5B` (~1 GB, no HF token needed). CPU-only.
+First run downloads Qwen-2.5-0.5B (~1 GB, no HF token needed). CPU-only.
 
 ## Repository Structure
 
 ```
 composable-kv/
 ├── README.md              # This file
-├── NOTES.md               # Session 1 detailed research log
+├── NOTES.md               # Session logs (1a–1j)
 ├── LICENSE
 ├── requirements.txt
 ├── conditions.py          # 4 conditions × 5 examples
-├── mve.py                 # M1 / M2 / M3 pipeline
-├── mve_h3.py              # H3 end-to-end (M4 / M5)
-├── analyze_layers.py      # Layer-wise K/V cosine
-├── h3_poc.py              # H3 5-fold CV (representation-level)
-├── h3_holdout.py          # H3 5-fold example-level held-out downstream
-├── rope_test.py           # RoPE-shift verification
+├── mve.py                 # M1 / M2 / M3 pipeline (aligned)
+├── mve_h3.py              # H3 end-to-end (M4 / M5, aligned)
+├── h3_holdout.py          # H3 5-fold example-level held-out (aligned)
+├── h3_poc.py              # H3 5-fold CV representation study
+├── h3_analysis.py         # W SVD interpretability
+├── analyze_layers.py      # Per-layer K/V cosine analysis
+├── rope_test.py           # RoPE-shift correctness verification
 ├── cost_analysis.py       # Wall-clock + FLOP estimates
 ├── sanity_check.py        # Pipeline correctness checks
-├── paper/                 # LaTeX paper draft (workshop / arXiv scale)
+├── paper/                 # LaTeX paper draft
 │   ├── paper.tex
+│   ├── paper_overleaf.tex # Single-file variant with embedded bib
 │   ├── references.bib
-│   └── README.md          # How to build (Overleaf or local pdflatex)
-└── results/               # Raw output logs from all runs
+│   ├── W_spectrum.pdf     # Figure 2 (SVD)
+│   ├── pareto.pdf         # Figure 1 (quality vs cost)
+│   └── README.md
+└── results/               # Raw output logs
 ```
 
 ## What this does not yet show
 
-- **Scale.** All results are on Qwen-2.5-0.5B; larger models (1.5B, 7B, 70B) untested. Baseline itself is unreliable for referential and reasoning queries at this scale.
-- **Model family.** Only Qwen tested. Llama, Mistral, Gemma may respond differently to naive concat, RoPE-shift, and V correction.
-- **Real workloads.** Only 20 hand-crafted controlled examples. No RAG, no long-context, no realistic serving pattern.
-- **n.** 5 examples per condition. Standard deviations are large; individual example effects visible in the raw logs. `n=50+` per condition is a near-term priority.
-- **Cost.** The claim that a 64×64 linear map is "cheap" is not yet backed by FLOP/latency/memory numbers vs full B prefill.
-- **Corrector expressivity.** Only one target layer (L12) and only a linear map. Whether MLP + A-context conditioning further reduces KL, or whether multi-layer application accumulates gains, is untested.
-- **Composition depth.** Only two contexts combined (A + B). Chains (A + B + C ...) are unexplored.
-- **Metric behavior.** KL and top-1 can move in opposite directions (see "How to read RoPE-shift" above). Reporting one alone would be misleading.
+- **Model scale.** Qwen-2.5-0.5B only; larger models untested. Baseline itself is degenerate on the *referential* condition, where the model produces empty completions at this scale.
+- **Model family.** Only Qwen tested; Llama/Mistral/Gemma may respond differently.
+- **Real workloads.** 20 hand-crafted controlled examples. RAG, long-context QA, multi-turn are unexplored.
+- **n and leakage.** n = 5 per condition; example templates share entity and structural patterns. Entity- or template-disjoint splits are a near-term follow-up.
+- **Corrector expressivity.** Single target layer (L12), linear map. MLP, A-context-conditional variants, multi-layer application untested.
+- **Composition depth.** Only two prefixes. Chains (A + B + C + ...) are unexplored.
+- **CacheBlend comparison.** The closest prior work (Yao et al., EuroSys 2025) recovers cross-context via selective recomputation; a direct empirical comparison on the same benchmark is left to future work.
 
-None of these blockers is fatal to the direction; each is the subject of a concrete follow-up in the Session 2 priority list at the bottom.
+## Related Work (representative)
 
-## Related Work (stub, to be expanded)
-
-- KV cache compression / eviction: H2O (arxiv 2306.14048), StreamingLLM (2309.17453), SnapKV (2404.14469), DuoAttention (2410.10819)
-- Prefix caching for serving: RadixAttention / SGLang, vLLM automatic prefix caching, Prompt Cache (2311.04934)
-- Representation arithmetic: Task Arithmetic (2212.04089), Editing Models with Task Arithmetic
-- Activation steering / superposition (Anthropic interpretability): Toy Models of Superposition
-- YOCO (2405.05254) for KV reuse structure
+- KV compression / eviction: H2O, StreamingLLM, SnapKV, DuoAttention
+- Prefix caching in serving: vLLM automatic prefix cache, RadixAttention (SGLang), Prompt Cache
+- **Cache blending (closest prior work): CacheBlend (Yao et al., EuroSys 2025, arXiv:2405.16444)**
+- Representation arithmetic: Task Arithmetic, Activation Addition
+- YOCO (You Only Cache Once)
+- Long-context / mechanistic interpretability: Toy Models of Superposition
 
 ## Project Status
 
-**Done in Session 1:**
+**Session 1 (2026-09-03 ~ 09-04):**
 - [x] MVE with 4 controlled conditions × 5 examples (n=20)
 - [x] Layer-wise K/V divergence analysis
 - [x] RoPE-shifted baseline (M2) and layer-selective variant (M3)
 - [x] Linear H3 corrector: 5-fold CV representation + in-sample end-to-end
-- [x] Held-out H3 evaluation (5-fold example-level split): -6.4% / -9.4% KL, matches in-sample within 0.003
-- [x] Cache-injection sanity checks (round-trip KL = 3e-7, all 4 checks pass)
-- [x] H3 cost analysis: wall-clock ~0.34 ms extra, ~0.0021% FLOPs vs prefill(B)
+- [x] Held-out H3 evaluation (5-fold example-level split)
+- [x] Cache-injection sanity checks (round-trip KL ≈ 3e-7, plus tokenization boundary check)
+- [x] H3 cost analysis (~0.34 ms extra, ~0.0021% FLOPs vs prefill(B))
+- [x] LaTeX paper draft
 
-**Session 2 priority (before scaling corrector expressivity):**
-- [ ] Scale n to 20~30 examples per condition, with entity / length / template variation to reduce leakage
-- [ ] Reproduce main held-out numbers on Qwen-2.5-1.5B where baselines are more reliable
+**Session 2 (2026-09-07):**
+- [x] W SVD interpretability (Figure 2, Section 5.5)
+- [x] Tokenization drift fix: rebuilt all downstream numbers under identical token ids
+- [x] CacheBlend added to Related Work with explicit differentiation
+- [x] M3 finding reversed from "negative" to positive under aligned scoring
+- [x] Paper metadata (title, author, keywords)
 
-**Then (contingent on the above):**
-- [ ] MLP + A-context-conditional corrector (only if scale doesn't already close the gap linearly)
-- [ ] Extend corrector to all mid-layers L10-L15 (only after measuring per-layer marginal gain)
-- [ ] Pareto measurement (quality vs FLOP / latency, needed for any composition claim)
+**Session 3 priorities (planned):**
+- [ ] Bootstrap CI for the M3 vs M1 aggregate KL difference
+- [ ] Fold-wise re-derivation of M3's excluded layer range
+- [ ] Reproduce main numbers on Qwen-2.5-1.5B
+- [ ] Entity- or template-disjoint held-out split
+- [ ] Direct comparison against CacheBlend on this benchmark
 
 ## License
 
