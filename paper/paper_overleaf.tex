@@ -80,6 +80,14 @@
   year={2024}
 }
 
+@inproceedings{yao2024cacheblend,
+  title={{CacheBlend: Fast Large Language Model Serving for RAG with Cached Knowledge Fusion}},
+  author={Yao, Jiayi and Li, Hanchen and Liu, Yuhan and Ray, Siddhant and Cheng, Yihua and Zhang, Qizheng and Du, Kuntai and Lu, Shan and Jiang, Junchen},
+  booktitle={EuroSys},
+  year={2025},
+  note={arXiv:2405.16444}
+}
+
 @article{elhage2022superposition,
   title={{Toy Models of Superposition}},
   author={Elhage, Nelson and Hume, Tristan and Olsson, Catherine and Schiefer, Nicholas and Henighan, Tom and Kravec, Shauna and Hatfield-Dodds, Zac and Lasenby, Robert and Drain, Dawn and Chen, Carol and Grosse, Roger and McCandlish, Sam and Kaplan, Jared and Amodei, Dario and Wattenberg, Martin and Olah, Christopher},
@@ -221,7 +229,7 @@ K^{(l)}_{\text{shifted}, i} = R\bigl( |A| \cdot \theta \bigr) \cdot K^{(l)}_{B, 
 \]
 where $R(\phi)$ denotes the standard half-rotation RoPE rotation by angle $\phi$. $V$ is unchanged. On our test example (independent \#0, $|A|=16$, $|B|=19$), the layer-averaged $K$ cosine between $B$-alone shifted and $B$-in-full grows from $0.817$ (raw) to $0.923$ (shifted), and layer L0 achieves cosine $1.0000$, verifying the implementation.
 
-\paragraph{M3: Layer-selective RoPE-shift.} Since layer-wise analysis (Section~\ref{sec:layers}) shows a mid-layer dip in value cosine, one might hypothesize that RoPE-shift damages the mid layers by imposing a false alignment there. M3 applies RoPE-shift to all layers \emph{except} $\{L_{10}, \ldots, L_{15}\}$.
+\paragraph{M3: Layer-selective RoPE-shift.} Since layer-wise analysis (Section~\ref{sec:layers}) shows a mid-layer dip in value cosine, one might hypothesize that RoPE-shift damages the mid layers by imposing a false alignment there. M3 applies RoPE-shift to all layers \emph{except} $\{L_{10}, \ldots, L_{15}\}$. The mid-layer range was chosen exploratorily from the value cosine dip observed on the full 20-example set (Section~\ref{sec:layers}), so the M3 result is not fully held-out at the layer-selection level; a fold-wise re-derivation of the excluded layers is deferred to future work.
 
 \paragraph{H3: Learned value corrector.} At a target layer $l^\star$ (we use $l^\star = 12$), we replace $V^{(l^\star)}_B$ with $\hat V^{(l^\star)}_B = V^{(l^\star)}_B W$, where $W \in \mathbb{R}^{d \times d}$ is fit by ridge-regularized least squares on training examples' $(V^{(l^\star)}_B, V^{(l^\star)}_{B|A})$ pairs. We compose M4 = M1 + H3 and M5 = M2 + H3.
 
