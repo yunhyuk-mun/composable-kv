@@ -1,0 +1,39 @@
+Loading Qwen/Qwen2.5-0.5B ...
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  22%|##2       | 64/290 [00:00<00:00, 630.52it/s]Loading weights:  44%|####4     | 128/290 [00:00<00:00, 546.82it/s]Loading weights:  63%|######3   | 184/290 [00:00<00:00, 487.82it/s]Loading weights:  81%|########  | 234/290 [00:00<00:00, 440.66it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 493.09it/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+
+Training H3 linear W on all 20 examples at layer L12 ...
+  Trained W on 536 samples, sanity in-sample cos = 0.7444
+
+independent:
+  M1_naive        KL=0.377 top1=0.40
+  M2_rope         KL=0.326 top1=0.80
+  M4_naive_h3     KL=0.383 top1=0.40
+  M5_rope_h3      KL=0.325 top1=0.80
+
+referential:
+  M1_naive        KL=1.168 top1=0.00
+  M2_rope         KL=1.302 top1=0.00
+  M4_naive_h3     KL=1.154 top1=0.00
+  M5_rope_h3      KL=1.232 top1=0.00
+
+conflicting:
+  M1_naive        KL=0.639 top1=0.40
+  M2_rope         KL=0.453 top1=0.80
+  M4_naive_h3     KL=0.611 top1=0.40
+  M5_rope_h3      KL=0.431 top1=0.80
+
+cross_inferential:
+  M1_naive        KL=0.134 top1=1.00
+  M2_rope         KL=0.225 top1=0.60
+  M4_naive_h3     KL=0.136 top1=0.80
+  M5_rope_h3      KL=0.223 top1=0.60
+
+======================================================================
+OVERALL AGGREGATE (all 20 examples, in-sample W)
+======================================================================
+method            KL mean    KL std    top1    top5   top10
+M1_naive            0.580     0.545    0.45    0.70    0.68
+M2_rope             0.577     0.562    0.55    0.70    0.70
+M4_naive_h3         0.571     0.537    0.40    0.71    0.67
+M5_rope_h3          0.553     0.531    0.55    0.73    0.70

@@ -161,13 +161,30 @@ def top_k_agreement(p_ref, p_test, k):
 
 
 def evaluate_method(model, tokenizer, cond, compose_fn):
-    kv_a, len_a = prefill(model, tokenizer, cond["A"])
-    kv_b, len_b = prefill(model, tokenizer, cond["B"])
+    # Tokenization-aligned: identical token ids on baseline and composition paths.
+    ids_a = tokenizer(cond["A"], return_tensors="pt").input_ids
+    ids_b = tokenizer(cond["B"], return_tensors="pt").input_ids
+    ids_q = tokenizer(cond["query"], return_tensors="pt").input_ids
+    len_a, len_b = ids_a.shape[1], ids_b.shape[1]
+
+    with torch.no_grad():
+        kv_a = model(input_ids=ids_a, use_cache=True).past_key_values
+        kv_b = model(input_ids=ids_b, use_cache=True).past_key_values
+
     composed_len = len_a + len_b
-    full_prompt = cond["A"] + " " + cond["B"] + cond["query"]
-    p_base = next_token_dist_from_scratch(model, tokenizer, full_prompt)
+    ids_all = torch.cat([ids_a, ids_b, ids_q], dim=1)
+
+    with torch.no_grad():
+        p_base = F.softmax(model(input_ids=ids_all).logits[0, -1, :], dim=-1)
+
     kv_c = compose_fn(kv_a, kv_b, len_a)
-    p_comp = next_token_dist_with_kv(model, tokenizer, cond["query"], kv_c, composed_len)
+    q_len = ids_q.shape[1]
+    attn = torch.ones(1, composed_len + q_len, dtype=torch.long)
+    with torch.no_grad():
+        p_comp = F.softmax(
+            model(input_ids=ids_q, attention_mask=attn, past_key_values=kv_c).logits[0, -1, :],
+            dim=-1,
+        )
     return {
         "kl": kl_divergence(p_base, p_comp),
         "t1": top_k_agreement(p_base, p_comp, 1),

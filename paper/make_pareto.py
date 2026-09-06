@@ -21,13 +21,13 @@ matplotlib.rcParams.update({
     "ytick.labelsize": 11,
 })
 
-# Order: best KL at the top of the bar chart
+# Order: best KL at the top of the bar chart (tokenization-aligned aggregate)
 methods = [
-    ("M4  M1 + H3 corrector",       0.308, 3.5,  "#1b9e77"),  # green
-    ("M1  naive concat",            0.329, 3.1,  "#4d4d4d"),  # gray
-    ("M5  M2 + H3 corrector",       0.367, 13.4, "#7570b3"),  # purple
-    ("M3  RoPE-shift ex mid",       0.404, 14.0, "#ff7f0e"),  # orange
-    ("M2  RoPE-shifted concat",     0.405, 14.1, "#d62728"),  # red
+    ("M3  RoPE-shift ex mid",       0.522, 14.0, "#ff7f0e"),  # orange, best
+    ("M5  M2 + H3 corrector",       0.553, 13.4, "#7570b3"),  # purple
+    ("M4  M1 + H3 corrector",       0.571, 3.5,  "#1b9e77"),  # green
+    ("M2  RoPE-shifted concat",     0.577, 14.1, "#d62728"),  # red
+    ("M1  naive concat",            0.580, 3.1,  "#4d4d4d"),  # gray
 ]
 
 labels     = [m[0] for m in methods]
@@ -48,20 +48,16 @@ for bar, v in zip(bars, kl_values):
 axL.set_xlim(0, max(kl_values) * 1.18)
 axL.axvline(0, color="black", linewidth=0.7)
 axL.set_xlabel("Held-out next-token KL vs full-prefill oracle  (lower is better)")
-axL.set_title("Quality  (Table 2 aggregate)", pad=10)
+axL.set_title("Quality  (aggregate KL, aligned tokenization)", pad=10)
 axL.invert_yaxis()  # best on top
 axL.grid(True, axis="x", alpha=0.3)
 axL.spines["top"].set_visible(False)
 axL.spines["right"].set_visible(False)
 
-# Baseline references indicated by dashed lines instead of arrows
-# (M1 baseline dashed grey; M2 baseline dashed red) so the bar length
-# difference below each baseline reads as the H3 improvement.
-axL.axvline(0.329, color="#4d4d4d", linestyle="--", linewidth=0.9, alpha=0.55)
-axL.text(0.329, -0.55, "M1 baseline", color="#4d4d4d", fontsize=8.5,
-         ha="center", va="center")
-axL.axvline(0.405, color="#d62728", linestyle="--", linewidth=0.9, alpha=0.55)
-axL.text(0.405, -0.55, "M2 baseline", color="#d62728", fontsize=8.5,
+# M1 and M2 baselines are essentially overlapping at 0.577/0.580 under
+# aligned tokenization, so a single un-corrected baseline band suffices.
+axL.axvline(0.578, color="#4d4d4d", linestyle="--", linewidth=0.9, alpha=0.55)
+axL.text(0.578, -0.55, "M1/M2 baseline", color="#4d4d4d", fontsize=8.5,
          ha="center", va="center")
 
 # --- RIGHT: cost bar chart ---

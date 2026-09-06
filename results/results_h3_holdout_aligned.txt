@@ -1,0 +1,69 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading Qwen/Qwen2.5-0.5B ...
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  22%|##2       | 65/290 [00:00<00:00, 643.25it/s]Loading weights:  45%|####4     | 130/290 [00:00<00:00, 457.77it/s]Loading weights:  62%|######1   | 179/290 [00:00<00:00, 435.88it/s]Loading weights:  80%|########  | 233/290 [00:00<00:00, 468.24it/s]Loading weights: 100%|##########| 290/290 [00:00<00:00, 493.00it/s]
+
+Pre-caching all 20 examples (prefill A, B, A+B, baseline dist) ...
+  cached ex  0 (independent #0)
+  cached ex  1 (independent #1)
+  cached ex  2 (independent #2)
+  cached ex  3 (independent #3)
+  cached ex  4 (independent #4)
+  cached ex  5 (referential #0)
+  cached ex  6 (referential #1)
+  cached ex  7 (referential #2)
+  cached ex  8 (referential #3)
+  cached ex  9 (referential #4)
+  cached ex 10 (conflicting #0)
+  cached ex 11 (conflicting #1)
+  cached ex 12 (conflicting #2)
+  cached ex 13 (conflicting #3)
+  cached ex 14 (conflicting #4)
+  cached ex 15 (cross_inferential #0)
+  cached ex 16 (cross_inferential #1)
+  cached ex 17 (cross_inferential #2)
+  cached ex 18 (cross_inferential #3)
+  cached ex 19 (cross_inferential #4)
+
+=== Fold 0: train=16, test=4 ===
+  In-sample W cos = 0.7592
+  Test example ids: [0, 5, 10, 15]
+
+=== Fold 1: train=16, test=4 ===
+  In-sample W cos = 0.7607
+  Test example ids: [1, 6, 11, 16]
+
+=== Fold 2: train=16, test=4 ===
+  In-sample W cos = 0.7531
+  Test example ids: [2, 7, 12, 17]
+
+=== Fold 3: train=16, test=4 ===
+  In-sample W cos = 0.7504
+  Test example ids: [3, 8, 13, 18]
+
+=== Fold 4: train=16, test=4 ===
+  In-sample W cos = 0.7539
+  Test example ids: [4, 9, 14, 19]
+
+======================================================================
+HELD-OUT AGGREGATE (n=20, 5-fold, example-level split)
+======================================================================
+method            KL mean    KL std    top1    top5   top10
+M1_naive            0.580     0.545    0.45    0.70    0.68
+M2_rope             0.577     0.562    0.55    0.70    0.70
+M4_naive_h3         0.570     0.537    0.40    0.71    0.68
+M5_rope_h3          0.555     0.537    0.60    0.72    0.70
+
+======================================================================
+HELD-OUT PER CONDITION (mean KL / top1)
+======================================================================
+condition                     M1_naive           M2_rope       M4_naive_h3        M5_rope_h3
+independent           KL=0.377 t1=0.40  KL=0.326 t1=0.80  KL=0.375 t1=0.40  KL=0.314 t1=0.80
+referential           KL=1.168 t1=0.00  KL=1.302 t1=0.00  KL=1.157 t1=0.00  KL=1.245 t1=0.00
+conflicting           KL=0.639 t1=0.40  KL=0.453 t1=0.80  KL=0.607 t1=0.40  KL=0.429 t1=1.00
+cross_inferential     KL=0.134 t1=1.00  KL=0.225 t1=0.60  KL=0.140 t1=0.80  KL=0.230 t1=0.60
+
+======================================================================
+DELTA M4-M1 and M5-M2 (held-out, positive dTop = win)
+======================================================================
+M4-M1  dKL = -0.0099   dTop1 = -0.050
+M5-M2  dKL = -0.0219   dTop1 = +0.050

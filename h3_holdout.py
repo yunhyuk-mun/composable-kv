@@ -75,8 +75,7 @@ def compose(cache_a, cache_b, len_a, method, W=None, target_layer=TARGET_LAYER):
     return new
 
 
-def next_token_dist_with_kv(model, tokenizer, query, cache, past_len):
-    q_ids = tokenizer(query, return_tensors="pt").input_ids
+def next_token_dist_with_kv(model, q_ids, cache, past_len):
     q_len = q_ids.shape[1]
     attn = torch.ones(1, past_len + q_len, dtype=torch.long)
     with torch.no_grad():
@@ -103,21 +102,32 @@ def top_k_agreement(p_ref, p_test, k):
 
 
 def cache_all_examples(model, tokenizer):
-    """Prefill A, B, A+B, and compute baseline dist once per example."""
+    """Prefill A, B, A+B, and compute baseline dist once per example.
+
+    Tokenization-aligned version: both the composition path and the
+    from-scratch baseline consume the same concatenated token ids
+    tokenize(A) ++ tokenize(B) ++ tokenize(Q), so any KL difference
+    reflects composition behavior rather than BPE boundary drift.
+    """
     examples = []
     for cond_name, exs in CONDITIONS.items():
         for i, cond in enumerate(exs):
             ids_a = tokenizer(cond["A"], return_tensors="pt").input_ids
             ids_b = tokenizer(cond["B"], return_tensors="pt").input_ids
+            ids_q = tokenizer(cond["query"], return_tensors="pt").input_ids
             ids_full = torch.cat([ids_a, ids_b], dim=1)
+            ids_all  = torch.cat([ids_a, ids_b, ids_q], dim=1)
             len_a = ids_a.shape[1]
 
             kv_a = prefill_ids(model, ids_a)
             kv_b = prefill_ids(model, ids_b)
             kv_full = prefill_ids(model, ids_full)
 
-            full_prompt = cond["A"] + " " + cond["B"] + cond["query"]
-            p_base = next_token_dist_from_scratch(model, tokenizer, full_prompt)
+            # Baseline: score the SAME concatenated token ids that the
+            # composition path will use (no BPE-boundary drift).
+            with torch.no_grad():
+                out = model(input_ids=ids_all)
+            p_base = F.softmax(out.logits[0, -1, :], dim=-1)
 
             # For W training
             v_b_l = kv_b.layers[TARGET_LAYER].values.squeeze(0).reshape(-1, 64)
@@ -130,7 +140,7 @@ def cache_all_examples(model, tokenizer):
                 "kv_b": kv_b,
                 "len_a": len_a,
                 "len_b": ids_b.shape[1],
-                "query": cond["query"],
+                "ids_q": ids_q,          # <- use exact token ids, no re-tokenize
                 "p_base": p_base,
                 "v_b_l": v_b_l,          # for training W
                 "v_full_b_l": v_full_b_l,
@@ -149,7 +159,7 @@ def fit_W(train_examples, ridge=1e-4):
 
 def evaluate_example(model, tokenizer, ex, method, W=None):
     cache = compose(ex["kv_a"], ex["kv_b"], ex["len_a"], method, W=W)
-    p_comp = next_token_dist_with_kv(model, tokenizer, ex["query"], cache, ex["len_a"] + ex["len_b"])
+    p_comp = next_token_dist_with_kv(model, ex["ids_q"], cache, ex["len_a"] + ex["len_b"])
     return {
         "kl":  kl_divergence(ex["p_base"], p_comp),
         "t1":  top_k_agreement(ex["p_base"], p_comp, 1),

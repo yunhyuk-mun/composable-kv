@@ -148,20 +148,63 @@ def greedy_from_scratch(model, tokenizer, full_prompt, max_new=25):
     return tokenizer.decode(out[0, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 
 
+# --- Token-id aligned variants (avoid BPE boundary drift) ---
+
+def next_token_dist_with_kv_ids(model, q_ids, cache, past_len):
+    q_len = q_ids.shape[1]
+    attn = torch.ones(1, past_len + q_len, dtype=torch.long)
+    with torch.no_grad():
+        out = model(input_ids=q_ids, attention_mask=attn, past_key_values=cache)
+    return F.softmax(out.logits[0, -1, :], dim=-1)
+
+
+def greedy_with_kv_ids(model, tokenizer, cache, past_len, q_ids, max_new=25):
+    q_len = q_ids.shape[1]
+    attn = torch.ones(1, past_len + q_len, dtype=torch.long)
+    with torch.no_grad():
+        out = model.generate(
+            input_ids=q_ids, attention_mask=attn, past_key_values=cache,
+            max_new_tokens=max_new, do_sample=False,
+            pad_token_id=tokenizer.eos_token_id,
+        )
+    return tokenizer.decode(out[0, q_len:], skip_special_tokens=True)
+
+
+def greedy_from_ids(model, tokenizer, ids_all, max_new=25):
+    with torch.no_grad():
+        out = model.generate(
+            input_ids=ids_all, max_new_tokens=max_new, do_sample=False,
+            pad_token_id=tokenizer.eos_token_id,
+        )
+    return tokenizer.decode(out[0, ids_all.shape[1]:], skip_special_tokens=True)
+
+
 def evaluate_method(model, tokenizer, cond, method_name, compose_fn):
-    kv_a, len_a = prefill(model, tokenizer, cond["A"])
-    kv_b, len_b = prefill(model, tokenizer, cond["B"])
+    # Tokenize A, B, Q separately, then use identical concatenated token
+    # ids on both the composition path and the from-scratch baseline so
+    # any KL difference reflects composition behavior rather than BPE
+    # boundary drift.
+    ids_a = tokenizer(cond["A"], return_tensors="pt").input_ids
+    ids_b = tokenizer(cond["B"], return_tensors="pt").input_ids
+    ids_q = tokenizer(cond["query"], return_tensors="pt").input_ids
+    len_a, len_b = ids_a.shape[1], ids_b.shape[1]
+
+    with torch.no_grad():
+        kv_a = model(input_ids=ids_a, use_cache=True).past_key_values
+        kv_b = model(input_ids=ids_b, use_cache=True).past_key_values
+
     composed_len = len_a + len_b
 
-    full_prompt = cond["A"] + " " + cond["B"] + cond["query"]
-    p_base = next_token_dist_from_scratch(model, tokenizer, full_prompt)
-    ans_base = greedy_from_scratch(model, tokenizer, full_prompt)
+    ids_all = torch.cat([ids_a, ids_b, ids_q], dim=1)
+    with torch.no_grad():
+        p_base = F.softmax(model(input_ids=ids_all).logits[0, -1, :], dim=-1)
+    ans_base = greedy_from_ids(model, tokenizer, ids_all)
 
     kv_dist = compose_fn(kv_a, kv_b, len_a)
-    p_comp = next_token_dist_with_kv(model, tokenizer, cond["query"], kv_dist, composed_len)
+    p_comp = next_token_dist_with_kv_ids(model, ids_q, kv_dist, composed_len)
 
     kv_gen = compose_fn(kv_a, kv_b, len_a)
-    ans_comp = greedy_with_kv(model, tokenizer, kv_gen, composed_len, cond["query"])
+    ans_comp = greedy_with_kv_ids(model, tokenizer, kv_gen, composed_len, ids_q)
 
     return {
         "method": method_name,
