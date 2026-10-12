@@ -48,7 +48,6 @@ Empirical:
 
 Writeup:
 
-- Replace `<repo-to-be-added>` with actual GitHub URL
 - Fill in institution / affiliation if applicable (currently
   "Independent research")
 - Sanity check appendix could be expanded with per-example tables

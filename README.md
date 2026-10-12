@@ -2,6 +2,8 @@
 
 **An empirical study of independent LLM prefill KV cache composition on Qwen-2.5-0.5B.** We separate composition error into (i) position mismatch and (ii) cross-context representation mismatch, and evaluate five composition methods on a 20-example controlled benchmark with tokenization-aligned scoring. Preliminary results; single small model, single family, small hand-crafted benchmark.
 
+Code was written mostly with an AI coding agent (Claude Code); the research question, review requests, and which results to keep were the author's. Single 0.5B model, n=20 — preliminary.
+
 Session logs in [NOTES.md](NOTES.md). Paper draft in [paper/](paper/).
 
 ## Research Question
